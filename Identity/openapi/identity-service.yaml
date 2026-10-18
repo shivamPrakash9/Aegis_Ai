@@ -1,0 +1,576 @@
+openapi: 3.1.0
+info:
+  title: AegisAI Identity Service API
+  description: >
+    Identity and Access Management microservice for AegisAI Enterprise AI Security & Governance Gateway.
+    Responsible for organization registration, user authentication, service accounts, and session verification.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3001
+    description: Local Development Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived access token signed by Identity Service
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Service account machine API key (format aegis_sa_<prefix>_<secret>)
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - correlationId
+          properties:
+            code:
+              type: string
+              example: UNAUTHORIZED
+            message:
+              type: string
+              example: Authentication credential is required.
+            correlationId:
+              type: string
+              format: uuid
+            details:
+              type: object
+
+    Organization:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Acme AI Labs
+        slug:
+          type: string
+          example: acme-ai
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, DEACTIVATED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    User:
+      type: object
+      required:
+        - id
+        - organizationId
+        - email
+        - displayName
+        - role
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          example: developer@acme.com
+        displayName:
+          type: string
+          example: Jane Doe
+        role:
+          type: string
+          enum: [ORGANIZATION_ADMIN, DEVELOPER, SECURITY_AUDITOR]
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, SUSPENDED]
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ServiceAccount:
+      type: object
+      required:
+        - id
+        - organizationId
+        - name
+        - keyPrefix
+        - permissions
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: gateway-scanner-bot
+        keyPrefix:
+          type: string
+          example: aegis_sa_9b8c12a4
+        permissions:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, REVOKED]
+        createdBy:
+          type: string
+          nullable: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ServiceAccountWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/ServiceAccount'
+        - type: object
+          required:
+            - apiKey
+          properties:
+            apiKey:
+              type: string
+              description: Plaintext machine key issued ONCE at creation/rotation. Never stored in plaintext.
+              example: aegis_sa_9b8c12a4_3f78e4a9918c...
+
+    TokenPair:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+        - tokenType
+      properties:
+        accessToken:
+          type: string
+          description: Signed JWT access token (15 mins TTL)
+        refreshToken:
+          type: string
+          description: Opaque rotation token (7 days TTL)
+        expiresIn:
+          type: integer
+          example: 900
+        tokenType:
+          type: string
+          example: Bearer
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness Probe
+      description: Returns process alive status.
+      responses:
+        '200':
+          description: Process is running.
+
+  /health/ready:
+    get:
+      summary: Readiness Probe
+      description: Returns readiness including PostgreSQL connection status without exposing secrets.
+      responses:
+        '200':
+          description: All critical dependencies are healthy.
+        '503':
+          description: A critical dependency is down.
+
+  /v1/organizations:
+    post:
+      summary: Register Organization
+      description: Creates an organization with optional initial admin bootstrap.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name:
+                  type: string
+                slug:
+                  type: string
+                bootstrapKey:
+                  type: string
+                adminUser:
+                  type: object
+                  required: [email, password, displayName]
+                  properties:
+                    email:
+                      type: string
+                      format: email
+                    password:
+                      type: string
+                    displayName:
+                      type: string
+      responses:
+        '201':
+          description: Organization created.
+        '400':
+          description: Validation error.
+        '409':
+          description: Organization slug or admin email conflict.
+
+  /v1/organizations/{organizationId}:
+    get:
+      summary: Retrieve Organization
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Organization details.
+        '403':
+          description: Cross-tenant access forbidden.
+        '404':
+          description: Organization not found.
+    patch:
+      summary: Update Organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                status:
+                  type: string
+                  enum: [ACTIVE, SUSPENDED, DEACTIVATED]
+      responses:
+        '200':
+          description: Organization updated.
+
+  /v1/auth/login:
+    post:
+      summary: User Login
+      description: Authenticates user credentials with Argon2id and returns short-lived JWT + refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Authenticated successfully.
+        '401':
+          description: Invalid email or password.
+
+  /v1/auth/refresh:
+    post:
+      summary: Rotate Access Token
+      description: Rotates refresh token with family replay detection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Tokens refreshed.
+        '401':
+          description: Invalid, expired, or compromised token.
+
+  /v1/auth/logout:
+    post:
+      summary: User Logout
+      description: Revokes session family.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '204':
+          description: Session terminated.
+
+  /v1/auth/me:
+    get:
+      summary: Caller Context
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Safe caller principal identity, roles, and permissions.
+
+  /v1/users:
+    post:
+      summary: Create Organization User
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, displayName]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                displayName:
+                  type: string
+                role:
+                  type: string
+                  enum: [ORGANIZATION_ADMIN, DEVELOPER, SECURITY_AUDITOR]
+      responses:
+        '201':
+          description: User created.
+        '403':
+          description: Forbidden / privilege escalation.
+        '409':
+          description: Email already in use.
+    get:
+      summary: List Organization Users
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Paginated users list.
+
+  /v1/users/{userId}:
+    get:
+      summary: Get User Profile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User profile.
+        '404':
+          description: User not found.
+    patch:
+      summary: Update User
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName:
+                  type: string
+                role:
+                  type: string
+                  enum: [ORGANIZATION_ADMIN, DEVELOPER, SECURITY_AUDITOR]
+                status:
+                  type: string
+                  enum: [ACTIVE, INACTIVE, SUSPENDED]
+      responses:
+        '200':
+          description: User updated.
+
+  /v1/users/{userId}/disable:
+    post:
+      summary: Disable User Account
+      description: Disables user account and immediately revokes all refresh sessions.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User disabled.
+
+  /v1/service-accounts:
+    post:
+      summary: Create Service Account
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, permissions]
+              properties:
+                name:
+                  type: string
+                permissions:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: Service account created with one-time API key.
+    get:
+      summary: List Service Accounts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of service accounts without secrets.
+
+  /v1/service-accounts/{serviceAccountId}:
+    get:
+      summary: Get Service Account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceAccountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Safe service account metadata.
+
+  /v1/service-accounts/{serviceAccountId}/rotate:
+    post:
+      summary: Rotate Service Account Secret
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceAccountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Rotated with new one-time secret.
+
+  /v1/service-accounts/{serviceAccountId}/revoke:
+    post:
+      summary: Revoke Service Account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceAccountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Service account revoked.
+
+  /v1/sessions/verify:
+    post:
+      summary: Verify Session Credential
+      description: Used by AI Gateway to verify JWTs or Machine API keys and retrieve principal context.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Credential valid and verified principal returned.
+        '401':
+          description: Invalid, expired, or revoked credential.
