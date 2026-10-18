@@ -1,0 +1,39 @@
+// Prisma Schema for AegisAI AI Gateway Service
+// Dedicated Database: aegis_gateway
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("GATEWAY_DATABASE_URL")
+}
+
+model AiRequest {
+  id                     String    @id @default(uuid())
+  organizationId         String    @map("organization_id")
+  callerId               String    @map("caller_id")
+  callerType             String    @map("caller_type")
+  status                 String    @default("ACCEPTED")
+  modelSelected          String?   @map("model_selected")
+  sanitizedPromptSummary String?   @map("sanitized_prompt_summary")
+  sanitizedResult        String?   @map("sanitized_result")
+  traceId                String    @map("trace_id")
+  idempotencyKey         String?   @map("idempotency_key")
+  payloadFingerprint     String?   @map("payload_fingerprint")
+  privacyAction          String?   @map("privacy_action")
+  policyDecision         String?   @map("policy_decision")
+  errorCode              String?   @map("error_code")
+  errorMessage           String?   @map("error_message")
+  metadata               String?   @map("metadata")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  completedAt            DateTime? @map("completed_at")
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, idempotencyKey])
+  @@index([traceId])
+  @@map("ai_requests")
+}

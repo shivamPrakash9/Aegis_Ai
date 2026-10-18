@@ -1,0 +1,429 @@
+openapi: 3.1.0
+info:
+  title: AegisAI AI Gateway Microservice API
+  version: 1.0.0
+  description: >
+    Enterprise AI Security & Governance Gateway Service.
+    Coordinates authentication verification, privacy scanning, policy enforcement,
+    idempotency, distributed rate limiting, and model routing.
+servers:
+  - url: http://localhost:3001
+    description: Local development gateway server
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness check
+      description: Returns process liveness status.
+      responses:
+        '200':
+          description: Service process is active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /health/ready:
+    get:
+      summary: Readiness check
+      description: Reports operational readiness of dedicated database and Redis dependencies.
+      responses:
+        '200':
+          description: All dependencies ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
+        '503':
+          description: One or more dependencies are unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
+
+  /v1/ai-requests:
+    post:
+      summary: Submit AI Request
+      description: >
+        Submits an AI request for asynchronous security pipeline evaluation,
+        privacy scanning, policy enforcement, and model routing.
+      security:
+        - BearerAuth: []
+        - ServiceAccountAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique idempotency key to prevent duplicate provider execution.
+          schema:
+            type: string
+        - name: X-Correlation-Id
+          in: header
+          required: false
+          description: Optional distributed tracing correlation identifier.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAiRequest'
+      responses:
+        '202':
+          description: Request durably accepted for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiRequestAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+    get:
+      summary: List AI Requests
+      description: Lists AI requests belonging strictly to caller's verified organization.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AiRequestStatus'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: List of scoped AI requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiRequestListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/ai-requests/{id}:
+    get:
+      summary: Get AI Request by ID
+      description: Retrieves status and sanitized results for a specific request scoped to organization.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: AI Request details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiRequestDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/ai-requests/{id}/trace:
+    get:
+      summary: Get AI Request Trace
+      description: Retrieves security and audit lifecycle trace for an AI request from Service 6.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Request trace lifecycle events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiRequestTraceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ServiceAccountAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: aegis_sa_<prefix>_<secret> machine credential.
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: UP
+        service:
+          type: string
+          example: aegis-ai-gateway
+        timestamp:
+          type: string
+          format: date-time
+
+    ReadinessStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: UP
+        service:
+          type: string
+          example: aegis-ai-gateway
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              example: UP
+            redis:
+              type: string
+              example: UP
+        timestamp:
+          type: string
+          format: date-time
+
+    AiRequestStatus:
+      type: string
+      enum:
+        - ACCEPTED
+        - PROCESSING
+        - WAITING_FOR_APPROVAL
+        - COMPLETED
+        - BLOCKED
+        - FAILED
+
+    CreateAiRequest:
+      type: object
+      required:
+        - messages
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            required:
+              - role
+              - content
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant]
+              content:
+                type: string
+        modelPreference:
+          type: object
+          properties:
+            capability:
+              type: string
+              enum: [general, code, analysis, creative, embedding]
+            provider:
+              type: string
+            model:
+              type: string
+        metadata:
+          type: object
+
+    AiRequestAccepted:
+      type: object
+      properties:
+        requestId:
+          type: string
+        status:
+          type: string
+          example: ACCEPTED
+        traceId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        statusUrl:
+          type: string
+
+    AiRequestDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/AiRequestStatus'
+        modelSelected:
+          type: string
+          nullable: true
+        sanitizedResult:
+          type: string
+          nullable: true
+        traceId:
+          type: string
+        privacyAction:
+          type: string
+          nullable: true
+        policyDecision:
+          type: string
+          nullable: true
+        errorCode:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AiRequestListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiRequestDetail'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+
+    AiRequestTraceResponse:
+      type: object
+      properties:
+        requestId:
+          type: string
+        traceId:
+          type: string
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              eventType:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              details:
+                type: object
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - correlationId
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            correlationId:
+              type: string
+            details:
+              type: object
+
+  responses:
+    BadRequest:
+      description: Malformed or invalid request body or parameters.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: Authentication failed or credential revoked.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: Insufficient privileges or cross-tenant access prohibited.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: Idempotency conflict or concurrent execution in-flight.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    TooManyRequests:
+      description: Rate limit exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    BadGateway:
+      description: Malformed or unexpected response from downstream dependency.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ServiceUnavailable:
+      description: Mandatory security or provider dependency unreachable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'

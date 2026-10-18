@@ -1,0 +1,71 @@
+services:
+  ai-gateway-db:
+    image: postgres:16-alpine
+    container_name: aegis_gateway_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aegis_gateway
+      POSTGRES_USER: aegis_gateway_user
+      POSTGRES_PASSWORD: aegis_gateway_secure_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - gateway_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis_gateway_user -d aegis_gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aegis_network
+
+  ai-gateway-redis:
+    image: redis:7-alpine
+    container_name: aegis_gateway_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aegis_network
+
+  ai-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis_ai_gateway
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+      GATEWAY_DATABASE_URL: "postgresql://aegis_gateway_user:aegis_gateway_secure_password@ai-gateway-db:5432/aegis_gateway?schema=public"
+      REDIS_URL: "redis://ai-gateway-redis:6379"
+      IDENTITY_SERVICE_URL: "http://host.docker.internal:3000"
+      PRIVACY_SCANNER_URL: "http://host.docker.internal:3002"
+      POLICY_SERVICE_URL: "http://host.docker.internal:3003"
+      MODEL_PROVIDER_SERVICE_URL: "http://host.docker.internal:3004"
+      SECURITY_AUDIT_SERVICE_URL: "http://host.docker.internal:3005"
+      IDEMPOTENCY_TTL_SECONDS: 86400
+      RATE_LIMIT_WINDOW_SECONDS: 60
+      RATE_LIMIT_MAX_REQUESTS: 100
+      LOG_LEVEL: info
+    depends_on:
+      ai-gateway-db:
+        condition: service_healthy
+      ai-gateway-redis:
+        condition: service_healthy
+    networks:
+      - aegis_network
+
+volumes:
+  gateway_pgdata:
+
+networks:
+  aegis_network:
+    driver: bridge
