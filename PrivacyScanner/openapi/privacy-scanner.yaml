@@ -1,0 +1,540 @@
+openapi: 3.1.0
+info:
+  title: AegisAI Privacy Scanner Microservice API
+  version: 1.0.0
+  description: >
+    Enterprise AI Security & Governance Gateway — Privacy Scanner Microservice (Service 3).
+    Detects Personally Identifiable Information (PII), credentials, secrets, and organization-configured
+    sensitive markers across inbound AI prompts and chat messages. Produces deterministic sanitized content
+    and evaluates structured privacy decisions (ALLOW, BLOCK, MASK, ROUTE, REQUIRE_APPROVAL) for the AI Gateway.
+servers:
+  - url: http://localhost:3002
+    description: Local development Privacy Scanner server
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness check
+      description: Reports process liveness status.
+      responses:
+        '200':
+          description: Process is active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /health/ready:
+    get:
+      summary: Readiness check
+      description: Reports readiness of essential dependencies (dedicated aegis_privacy PostgreSQL).
+      responses:
+        '200':
+          description: All dependencies ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
+        '503':
+          description: One or more dependencies are unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
+
+  /v1/scan:
+    post:
+      summary: Execute Privacy and Secret Scan
+      description: >
+        Scans inbound chat messages or text for PII, high-risk credentials, and custom organizational keywords.
+        Produces deterministic sanitized message representations and returns privacy decision with findings.
+      security:
+        - BearerAuth: []
+        - InternalServiceKey: []
+      parameters:
+        - name: X-Correlation-Id
+          in: header
+          required: false
+          description: Distributed tracing correlation identifier.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanRequest'
+      responses:
+        '200':
+          description: Scan completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/scan/{scanId}:
+    get:
+      summary: Retrieve Scan Execution Telemetry
+      description: Retrieves non-sensitive execution metadata by scan identifier. Scoped strictly to caller organization.
+      security:
+        - BearerAuth: []
+        - InternalServiceKey: []
+      parameters:
+        - name: scanId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Scan metadata retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanMetadata'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/config:
+    get:
+      summary: Retrieve Scanner Configuration
+      description: Retrieves organization-specific scanner rules and enabled categories.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Scanner configuration details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerConfigResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    put:
+      summary: Update Scanner Configuration
+      description: Updates organization enabled categories and rule set options.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScannerConfig'
+      responses:
+        '200':
+          description: Updated scanner configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerConfig'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/config/patterns:
+    post:
+      summary: Register Custom Sensitive Pattern
+      description: Registers an organization-scoped keyword or safe regular expression rule. ReDoS validated.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCustomPattern'
+      responses:
+        '201':
+          description: Pattern created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomPattern'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/config/limitations:
+    get:
+      summary: Detection Capabilities & Limitations
+      description: Transparency endpoint detailing detector methodologies and known detection limitations.
+      responses:
+        '200':
+          description: Limitations metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  limitations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category:
+                          type: string
+                        method:
+                          type: string
+                        limitations:
+                          type: array
+                          items:
+                            type: string
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Scoped JWT issued by AegisAI Identity Service.
+    InternalServiceKey:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Key
+      description: Service-to-service preshared secret key for internal cluster communication.
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: UP
+        service:
+          type: string
+          example: PrivacyScanner
+        timestamp:
+          type: string
+          format: date-time
+
+    ReadinessStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [READY, DEGRADED]
+        service:
+          type: string
+          example: PrivacyScanner
+        dependencies:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [UP, DOWN]
+
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant, system, developer, tool]
+        content:
+          type: string
+          maxLength: 50000
+
+    ScanRequest:
+      type: object
+      required: [organizationId]
+      properties:
+        organizationId:
+          type: string
+          example: org_enterprise_alpha
+        requestId:
+          type: string
+          example: req_77d291a5
+        mode:
+          type: string
+          enum: [MASK, BLOCK, AUDIT, ALLOW]
+          default: MASK
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        content:
+          type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChatMessage'
+
+    Finding:
+      type: object
+      properties:
+        type:
+          type: string
+          example: EMAIL
+        category:
+          type: string
+          example: EMAIL
+        severity:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+        description:
+          type: string
+          example: Email address detected
+        replacementToken:
+          type: string
+          example: "[EMAIL_1]"
+        location:
+          type: object
+          properties:
+            messageIndex:
+              type: integer
+            startIndex:
+              type: integer
+            endIndex:
+              type: integer
+
+    ScanResponse:
+      type: object
+      required: [action, decision, status, scanId]
+      properties:
+        action:
+          type: string
+          enum: [ALLOW, BLOCK, MASK, ROUTE, REQUIRE_APPROVAL]
+          description: Primary scan action expected by AI Gateway client.
+        decision:
+          type: string
+          enum: [ALLOW, BLOCK, MASK, ROUTE, REQUIRE_APPROVAL]
+        status:
+          type: string
+          example: COMPLETED
+        scanId:
+          type: string
+          example: scan_82c19a04ef1299ab
+        requestId:
+          type: string
+          example: req_77d291a5
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Finding'
+        sanitizedMessages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        sanitizedContent:
+          type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChatMessage'
+        routingConstraints:
+          type: object
+        ruleSetVersion:
+          type: string
+          example: 1.0.0
+        durationMs:
+          type: integer
+          example: 4
+
+    ScanMetadata:
+      type: object
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        requestId:
+          type: string
+        ruleSetVersion:
+          type: string
+        detectedCategories:
+          type: array
+          items:
+            type: string
+        findingsCount:
+          type: integer
+        decision:
+          type: string
+        processingDurationMs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    ScannerConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        enabledCategories:
+          type: array
+          items:
+            type: string
+        maskingConfiguration:
+          type: object
+        ruleSetVersion:
+          type: string
+        status:
+          type: string
+
+    ScannerConfigResponse:
+      type: object
+      properties:
+        config:
+          $ref: '#/components/schemas/ScannerConfig'
+        customPatterns:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomPattern'
+        supportedCategories:
+          type: array
+          items:
+            type: string
+
+    UpdateScannerConfig:
+      type: object
+      properties:
+        organizationId:
+          type: string
+        enabledCategories:
+          type: array
+          items:
+            type: string
+        maskingConfiguration:
+          type: object
+        ruleSetVersion:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+
+    AddCustomPattern:
+      type: object
+      required: [name, pattern]
+      properties:
+        organizationId:
+          type: string
+        name:
+          type: string
+        pattern:
+          type: string
+        category:
+          type: string
+        severity:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+        action:
+          type: string
+          enum: [BLOCK, MASK, REQUIRE_APPROVAL, ROUTE, ALLOW]
+        replacement:
+          type: string
+        enabled:
+          type: boolean
+
+    CustomPattern:
+      type: object
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        name:
+          type: string
+        pattern:
+          type: string
+        severity:
+          type: string
+        action:
+          type: string
+        enabled:
+          type: boolean
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, correlationId]
+          properties:
+            code:
+              type: string
+              example: BAD_REQUEST
+            message:
+              type: string
+              example: Invalid scan request payload
+            correlationId:
+              type: string
+              example: corr_981a2f4c
+            details:
+              type: array
+              items:
+                type: object
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters or payload.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: Authentication credentials missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: Caller lacks required permissions or tenant mismatch detected.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Target resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    PayloadTooLarge:
+      description: Request body or content exceeds maximum size limits.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalServerError:
+      description: Unexpected internal server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ServiceUnavailable:
+      description: Service dependency is offline or unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'

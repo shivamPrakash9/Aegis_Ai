@@ -1,0 +1,57 @@
+services:
+  privacy-scanner-db:
+    image: postgres:16-alpine
+    container_name: aegis_privacy_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aegis_privacy
+      POSTGRES_USER: aegis_privacy_user
+      POSTGRES_PASSWORD: aegis_privacy_secure_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - privacy_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis_privacy_user -d aegis_privacy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aegis_network
+
+  privacy-scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis_privacy_scanner
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      NODE_ENV: production
+      PRIVACY_DATABASE_URL: "postgresql://aegis_privacy_user:aegis_privacy_secure_password@privacy-scanner-db:5432/aegis_privacy?schema=public"
+      PRIVACY_JWT_SECRET: "aegis_privacy_prod_signing_secret_set_securely"
+      PRIVACY_JWT_ISSUER: "aegis-identity"
+      PRIVACY_JWT_AUDIENCE: "aegis-privacy"
+      INTERNAL_SERVICE_KEY: "aegis_internal_service_key_change_in_production"
+      IDENTITY_SERVICE_URL: "http://host.docker.internal:3000"
+      MAX_REQUEST_BODY_BYTES: 1048576
+      MAX_CONTENT_LENGTH: 50000
+      MAX_SCAN_ITEMS: 100
+      SCAN_TIMEOUT_MS: 5000
+      PRIVACY_DEFAULT_MODE: "MASK"
+      PRIVACY_RULESET_VERSION: "1.0.0"
+      LOG_LEVEL: info
+    depends_on:
+      privacy-scanner-db:
+        condition: service_healthy
+    networks:
+      - aegis_network
+
+volumes:
+  privacy_pgdata:
+
+networks:
+  aegis_network:
+    external: true
