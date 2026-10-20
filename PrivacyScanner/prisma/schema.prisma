@@ -1,0 +1,58 @@
+// Prisma Schema for AegisAI Privacy Scanner Service
+// Dedicated Database: aegis_privacy
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PRIVACY_DATABASE_URL")
+}
+
+model ScannerConfiguration {
+  id                   String   @id @default(uuid())
+  organizationId       String   @unique @map("organization_id")
+  enabledCategories    String   @default("[\"EMAIL\",\"PHONE\",\"PAN\",\"AADHAAR\",\"SECRET\",\"CREDENTIAL_ASSIGNMENT\",\"IP_ADDRESS\"]") @map("enabled_categories")
+  maskingConfiguration String   @default("{}") @map("masking_configuration")
+  ruleSetVersion       String   @default("1.0.0") @map("ruleset_version")
+  status               String   @default("ACTIVE")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([organizationId])
+  @@map("scanner_configurations")
+}
+
+model CustomSensitivePattern {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  category       String   @default("CUSTOM")
+  pattern        String
+  severity       String   @default("HIGH")
+  action         String   @default("BLOCK")
+  replacement    String?
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([organizationId, enabled])
+  @@map("custom_sensitive_patterns")
+}
+
+model ScanMetadata {
+  id                   String   @id @default(uuid())
+  organizationId       String   @map("organization_id")
+  requestId            String?  @map("request_id")
+  ruleSetVersion       String   @default("1.0.0") @map("ruleset_version")
+  detectedCategories   String   @default("[]") @map("detected_categories")
+  findingsCount        Int      @default(0) @map("findings_count")
+  decision             String
+  processingDurationMs Int      @default(0) @map("processing_duration_ms")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId, createdAt])
+  @@index([requestId])
+  @@map("scan_metadata")
+}
