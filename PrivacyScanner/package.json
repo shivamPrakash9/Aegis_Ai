@@ -40,10 +40,7 @@
     "pino-pretty": "^13.2.0",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^10.0.0",
-<<<<<<< HEAD
     "xmlbuilder2": "^4.0.3",
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
     "yaml": "^2.9.1"
   },
   "devDependencies": {

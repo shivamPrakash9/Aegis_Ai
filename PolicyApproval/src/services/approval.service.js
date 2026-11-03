@@ -6,10 +6,7 @@ const { logger } = require('../utils/logger');
 
 const ALLOWED_APPROVER_ROLES = new Set([
   'ADMIN',
-<<<<<<< HEAD
   'ORGANIZATION_ADMIN',
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
   'SUPER_ADMIN',
   'POLICY_ADMIN',
   'SECURITY_ADMIN',
@@ -24,15 +21,9 @@ class ApprovalService {
   }
 
   /**
-<<<<<<< HEAD
    * List approvals for a tenant organization, isolating by requesterId for non-approvers.
    */
   async listApprovals(organizationId, { page = 1, limit = 20, status } = {}, principal = {}) {
-=======
-   * List approvals for a tenant organization.
-   */
-  async listApprovals(organizationId, { page = 1, limit = 20, status } = {}) {
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
     const offset = (pageNum - 1) * limitNum;
@@ -42,7 +33,6 @@ class ApprovalService {
       throw new BadRequestError(`Invalid status filter '${status}'. Must be PENDING, APPROVED, REJECTED, or EXPIRED.`);
     }
 
-<<<<<<< HEAD
     const isApprover = ALLOWED_APPROVER_ROLES.has(principal.role) || principal.isInternalService;
     const requesterId = isApprover ? undefined : (principal.id || undefined);
 
@@ -51,12 +41,6 @@ class ApprovalService {
       offset,
       status: normalizedStatus,
       requesterId
-=======
-    const { items, total } = await this.approvalRepo.listByOrganization(organizationId, {
-      limit: limitNum,
-      offset,
-      status: normalizedStatus
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
     });
 
     return {
@@ -71,16 +55,11 @@ class ApprovalService {
   /**
    * Get an approval request by ID.
    */
-<<<<<<< HEAD
   async getApproval(approvalId, organizationId, principal = {}) {
     const isApprover = ALLOWED_APPROVER_ROLES.has(principal.role) || principal.isInternalService;
     const requesterId = isApprover ? null : (principal.id || null);
 
     const approval = await this.approvalRepo.findById(approvalId, organizationId, requesterId);
-=======
-  async getApproval(approvalId, organizationId) {
-    const approval = await this.approvalRepo.findById(approvalId, organizationId);
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
     if (!approval) {
       throw new NotFoundError(`Approval request '${approvalId}' not found.`);
     }

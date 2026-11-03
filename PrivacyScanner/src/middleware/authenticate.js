@@ -38,7 +38,6 @@ function authenticate(options = { optional: false }) {
       const token = authHeader.slice(7).trim();
 
       try {
-<<<<<<< HEAD
         const allowedIssuers = Array.from(new Set([env.privacyJwtIssuer, 'aegis-identity-service', 'aegis-identity'].filter(Boolean)));
         const allowedAudiences = Array.from(new Set([env.privacyJwtAudience, 'aegis-gateway', 'aegis-privacy'].filter(Boolean)));
 
@@ -48,14 +47,6 @@ function authenticate(options = { optional: false }) {
         });
 
         const orgId = decoded.organizationId || decoded.org_id || decoded.orgId || null;
-=======
-        const decoded = jwt.verify(token, env.privacyJwtSecret, {
-          issuer: env.privacyJwtIssuer,
-          audience: env.privacyJwtAudience
-        });
-
-        const orgId = decoded.organizationId || decoded.orgId || null;
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
 
         req.principal = {
           id: decoded.sub || decoded.id,

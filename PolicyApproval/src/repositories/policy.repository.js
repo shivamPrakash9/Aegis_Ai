@@ -85,16 +85,10 @@ class PolicyRepository {
         if (status) where.status = status;
         if (category) where.category = category;
 
-<<<<<<< HEAD
         const [rawItems, total] = await Promise.all([
           prisma.policy.findMany({
             where,
             include: { versions: { orderBy: { version: 'desc' } } },
-=======
-        const [items, total] = await Promise.all([
-          prisma.policy.findMany({
-            where,
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
             skip: offset,
             take: limit,
             orderBy: { createdAt: 'desc' }
@@ -102,7 +96,6 @@ class PolicyRepository {
           prisma.policy.count({ where })
         ]);
 
-<<<<<<< HEAD
         const items = rawItems.map((p) => ({
           ...p,
           versions: (p.versions || []).map((v) => ({
@@ -111,8 +104,6 @@ class PolicyRepository {
           }))
         }));
 
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
         return { items, total };
       } catch (err) {
         logger.debug({ err: err.message }, 'Database read failed for policy list, using in-memory');
@@ -129,14 +120,10 @@ class PolicyRepository {
     items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     const total = items.length;
-<<<<<<< HEAD
     const paginated = items.slice(offset, offset + limit).map((p) => ({
       ...p,
       versions: this._inMemoryVersions.get(p.id) || []
     }));
-=======
-    const paginated = items.slice(offset, offset + limit);
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
 
     return { items: paginated, total };
   }

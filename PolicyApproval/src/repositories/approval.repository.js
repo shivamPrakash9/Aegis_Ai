@@ -77,7 +77,6 @@ class ApprovalRepository {
   }
 
   /**
-<<<<<<< HEAD
    * Retrieves an approval request by ID scoped to the organization and optionally requesterId.
    */
   async findById(approvalId, organizationId, requesterId = null) {
@@ -88,16 +87,6 @@ class ApprovalRepository {
         if (requesterId) where.requesterId = requesterId;
         return await prisma.approvalRequest.findFirst({
           where
-=======
-   * Retrieves an approval request by ID scoped to the organization.
-   */
-  async findById(approvalId, organizationId) {
-    if (!this._forceInMemory) {
-      try {
-        const prisma = getPrismaClient();
-        return await prisma.approvalRequest.findFirst({
-          where: { id: approvalId, organizationId }
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
         });
       } catch (err) {
         logger.debug({ err: err.message }, 'Database read failed for approval lookup, using in-memory');
@@ -106,36 +95,24 @@ class ApprovalRepository {
 
     const item = this._inMemoryApprovals.get(approvalId);
     if (item && item.organizationId === organizationId) {
-<<<<<<< HEAD
       if (requesterId && item.requesterId !== requesterId) {
         return null;
       }
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
       return { ...item };
     }
     return null;
   }
 
   /**
-<<<<<<< HEAD
    * Lists approval requests for an organization with pagination and optional requesterId filter.
    */
   async listByOrganization(organizationId, { limit = 20, offset = 0, status, requesterId } = {}) {
-=======
-   * Lists approval requests for an organization with pagination.
-   */
-  async listByOrganization(organizationId, { limit = 20, offset = 0, status } = {}) {
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
     if (!this._forceInMemory) {
       try {
         const prisma = getPrismaClient();
         const where = { organizationId };
         if (status) where.status = status;
-<<<<<<< HEAD
         if (requesterId) where.requesterId = requesterId;
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
 
         const [items, total] = await Promise.all([
           prisma.approvalRequest.findMany({
@@ -158,10 +135,7 @@ class ApprovalRepository {
     );
 
     if (status) items = items.filter((a) => a.status === status);
-<<<<<<< HEAD
     if (requesterId) items = items.filter((a) => a.requesterId === requesterId);
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
 
     items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 

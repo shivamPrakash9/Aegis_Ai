@@ -11,12 +11,9 @@ const swaggerUi = require('swagger-ui-express');
 const { env } = require('./config/env');
 const { requestLogger } = require('./middleware/requestLogger');
 const { errorHandler } = require('./middleware/errorHandler');
-<<<<<<< HEAD
 const { contentNegotiationMiddleware } = require('./middleware/contentNegotiation');
 const { etagCacheMiddleware } = require('./middleware/etagCache');
 const { cacheControl } = require('./middleware/cacheControl');
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
 const rootRouter = require('./routes');
 const { NotFoundError } = require('./utils/errors');
 const { logger } = require('./utils/logger');
@@ -43,7 +40,6 @@ app.use(express.urlencoded({ extended: true, limit: env.maxRequestBodyBytes }));
 // Request logging & correlation tracking
 app.use(requestLogger);
 
-<<<<<<< HEAD
 // Content Negotiation: JSON and XML (Requirement 7)
 app.use(contentNegotiationMiddleware);
 
@@ -53,8 +49,6 @@ app.use(cacheControl('private-no-store'));
 // ETag and HTTP 304 Not Modified Support (Requirement 6)
 app.use(etagCacheMiddleware);
 
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
 // Serve OpenAPI 3.1 Documentation via Swagger UI at /docs
 try {
   const openApiPath = path.join(__dirname, '../openapi/privacy-scanner.yaml');
@@ -62,14 +56,11 @@ try {
     const fileContent = fs.readFileSync(openApiPath, 'utf8');
     const swaggerDoc = yaml.parse(fileContent);
     app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
-<<<<<<< HEAD
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
     app.get('/openapi.json', (_req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.json(swaggerDoc);
     });
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
     app.get('/docs.yaml', (_req, res) => {
       res.setHeader('Content-Type', 'text/yaml');
       res.send(fileContent);

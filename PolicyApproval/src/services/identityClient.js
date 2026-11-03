@@ -33,7 +33,6 @@ class IdentityClient {
       return cached.data;
     }
 
-<<<<<<< HEAD
     // In isolated unit tests where baseUrl is default localhost:3000, attempt local synthetic JWT verification first
     if (env.isTest && this.baseUrl.includes('localhost:3000')) {
       try {
@@ -61,8 +60,6 @@ class IdentityClient {
       }
     }
 
-=======
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
     // Try remote Identity Service /v1/sessions/verify
     const url = `${this.baseUrl}/v1/sessions/verify`;
     const controller = new AbortController();

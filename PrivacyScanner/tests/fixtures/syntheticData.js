@@ -74,11 +74,7 @@ const syntheticSamples = {
     githubPat: 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
     openAiKey: 'sk-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF',
     anthropicKey: 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789',
-<<<<<<< HEAD
     slackToken: 'xoxb-123456789012-1234567890123-abcdefghijklmnopqrstuvwx',
-=======
-    slackToken: 'xyz',
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
     privateKeyPem: '-----BEGIN PRIVATE KEY-----\nMIGEAgEAMBAGByqGSM49AgEGBSuBBAAKBG0wawIBAQQgExampleKeyContentOnly\n-----END PRIVATE KEY-----'
   },
 

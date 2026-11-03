@@ -18,7 +18,6 @@ const env = {
   databaseUrl: process.env.POLICY_DATABASE_URL,
 
   // Authentication & Internal Security
-<<<<<<< HEAD
   policyJwtSecret:
     process.env.POLICY_JWT_SECRET ||
     process.env.JWT_SECRET ||
@@ -28,11 +27,6 @@ const env = {
       : 'dev_jwt_access_secret_minimum_32_characters_long_12345'),
   policyJwtIssuer: process.env.POLICY_JWT_ISSUER || 'aegis-identity-service',
   policyJwtAudience: process.env.POLICY_JWT_AUDIENCE || 'aegis-gateway',
-=======
-  policyJwtSecret: process.env.POLICY_JWT_SECRET || 'aegis_policy_dev_jwt_secret_change_in_production',
-  policyJwtIssuer: process.env.POLICY_JWT_ISSUER || 'aegis-identity',
-  policyJwtAudience: process.env.POLICY_JWT_AUDIENCE || 'aegis-policy',
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
   internalServiceKey: process.env.INTERNAL_SERVICE_KEY || 'aegis_internal_service_key_dev_only',
 
   // Downstream / Peer Microservices

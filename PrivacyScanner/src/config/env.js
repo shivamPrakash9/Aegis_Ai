@@ -18,7 +18,6 @@ const env = {
   databaseUrl: process.env.PRIVACY_DATABASE_URL,
 
   // Authentication & Internal Security
-<<<<<<< HEAD
   privacyJwtSecret:
     process.env.PRIVACY_JWT_SECRET ||
     process.env.JWT_SECRET ||
@@ -28,11 +27,6 @@ const env = {
       : 'dev_jwt_access_secret_minimum_32_characters_long_12345'),
   privacyJwtIssuer: process.env.PRIVACY_JWT_ISSUER || 'aegis-identity-service',
   privacyJwtAudience: process.env.PRIVACY_JWT_AUDIENCE || 'aegis-gateway',
-=======
-  privacyJwtSecret: process.env.PRIVACY_JWT_SECRET || 'aegis_privacy_dev_jwt_secret_change_in_production',
-  privacyJwtIssuer: process.env.PRIVACY_JWT_ISSUER || 'aegis-identity',
-  privacyJwtAudience: process.env.PRIVACY_JWT_AUDIENCE || 'aegis-privacy',
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
   internalServiceKey: process.env.INTERNAL_SERVICE_KEY || 'aegis_internal_service_key_dev_only',
 
   // Downstream Identity Service (optional verification fallback)

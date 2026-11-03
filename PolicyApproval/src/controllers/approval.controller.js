@@ -23,15 +23,11 @@ class ApprovalController {
     try {
       const organizationId = this._getOrgId(req);
       const { page, limit, status } = req.query;
-<<<<<<< HEAD
       const result = await this.service.listApprovals(
         organizationId,
         { page, limit, status },
         req.principal
       );
-=======
-      const result = await this.service.listApprovals(organizationId, { page, limit, status });
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -42,11 +38,7 @@ class ApprovalController {
     try {
       const organizationId = this._getOrgId(req);
       const approvalId = req.params.id;
-<<<<<<< HEAD
       const result = await this.service.getApproval(approvalId, organizationId, req.principal);
-=======
-      const result = await this.service.getApproval(approvalId, organizationId);
->>>>>>> 50d971dc153997b30851483238d0cb8802b7327f
       res.status(200).json(result);
     } catch (err) {
       next(err);
