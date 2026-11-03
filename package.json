@@ -1,0 +1,41 @@
+{
+  "name": "aegis-ai-platform",
+  "version": "1.0.0",
+  "description": "AegisAI Enterprise AI Security & Governance Gateway Microservices Platform",
+  "private": true,
+  "scripts": {
+    "start": "concurrently -k -p \"[{name}]\" -n \"ID,GW,PRIV,POL,MOD,AUD,UI\" -c \"blue,green,magenta,yellow,cyan,red,white\" \"npm:start:identity\" \"npm:start:gateway\" \"npm:start:privacy\" \"npm:start:policy\" \"npm:start:model\" \"npm:start:audit\" \"npm:start:frontend\"",
+    "start:services": "concurrently -k -p \"[{name}]\" -n \"ID,GW,PRIV,POL,MOD,AUD\" -c \"blue,green,magenta,yellow,cyan,red\" \"npm:start:identity\" \"npm:start:gateway\" \"npm:start:privacy\" \"npm:start:policy\" \"npm:start:model\" \"npm:start:audit\"",
+    "start:identity": "npm --prefix Identity run start",
+    "start:gateway": "npm --prefix AIGateway run start",
+    "start:privacy": "npm --prefix PrivacyScanner run start",
+    "start:policy": "npm --prefix PolicyApproval run start",
+    "start:model": "npm --prefix ModelProvider run start",
+    "start:audit": "npm --prefix SecurityAudit run start",
+    "start:frontend": "npm --prefix frontend run dev",
+    "seed:dev": "npx tsx Identity/src/scripts/seedDev.ts",
+    "test:identity": "npm --prefix Identity test",
+    "test:gateway": "npm --prefix AIGateway test",
+    "test:privacy": "npm --prefix PrivacyScanner test",
+    "test:policy": "npm --prefix PolicyApproval test",
+    "test:model": "npm --prefix ModelProvider test",
+    "test:audit": "npm --prefix SecurityAudit test",
+    "test:e2e": "node ./AIGateway/node_modules/jest/bin/jest.js --config tests/e2e/jest.config.js --runInBand --detectOpenHandles --forceExit tests/e2e/fullSystemLifecycle.e2e.test.js",
+    "test:persistence": "node ./AIGateway/node_modules/jest/bin/jest.js --config tests/e2e/jest.config.js --runInBand --detectOpenHandles --forceExit tests/e2e/persistentDatabase.e2e.test.js",
+    "test:all": "npm run test:identity && npm run test:gateway && npm run test:privacy && npm run test:policy && npm run test:model && npm run test:audit && npm run test:e2e && npm run test:persistence"
+  },
+  "keywords": [
+    "aegis-ai",
+    "microservices",
+    "ai-gateway",
+    "security",
+    "governance",
+    "privacy",
+    "audit"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}

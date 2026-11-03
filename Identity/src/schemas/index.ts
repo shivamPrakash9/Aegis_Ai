@@ -121,6 +121,7 @@ export interface CreateUserInput {
   password: string;
   displayName: string;
   role?: 'ORGANIZATION_ADMIN' | 'DEVELOPER' | 'SECURITY_AUDITOR';
+  organizationId?: string;
 }
 
 export const createUserSchema: JSONSchemaType<CreateUserInput> = {
@@ -133,10 +134,11 @@ export const createUserSchema: JSONSchemaType<CreateUserInput> = {
       type: 'string',
       enum: ['ORGANIZATION_ADMIN', 'DEVELOPER', 'SECURITY_AUDITOR'],
       nullable: true
-    }
+    },
+    organizationId: { type: 'string', minLength: 1, nullable: true }
   },
   required: ['email', 'password', 'displayName'],
-  additionalProperties: false
+  additionalProperties: true
 };
 
 export interface UpdateUserInput {
@@ -206,14 +208,28 @@ export const verifySessionSchema: JSONSchemaType<VerifySessionInput> = {
 export interface PaginationQuery {
   page?: number;
   limit?: number;
+  search?: string;
+  role?: 'ORGANIZATION_ADMIN' | 'DEVELOPER' | 'SECURITY_AUDITOR';
+  status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 }
 
 export const paginationQuerySchema: JSONSchemaType<PaginationQuery> = {
   type: 'object',
   properties: {
     page: { type: 'integer', minimum: 1, nullable: true },
-    limit: { type: 'integer', minimum: 1, maximum: 100, nullable: true }
+    limit: { type: 'integer', minimum: 1, maximum: 100, nullable: true },
+    search: { type: 'string', maxLength: 100, nullable: true },
+    role: {
+      type: 'string',
+      enum: ['ORGANIZATION_ADMIN', 'DEVELOPER', 'SECURITY_AUDITOR'],
+      nullable: true
+    },
+    status: {
+      type: 'string',
+      enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED'],
+      nullable: true
+    }
   },
   required: [],
-  additionalProperties: false
+  additionalProperties: true
 };

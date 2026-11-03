@@ -61,9 +61,9 @@ class ModelProviderClient {
       }
 
       if (!response.ok) {
-        throw new BadGatewayError(
-          `Model & Provider Service returned HTTP status ${response.status}.`
-        );
+        const errJson = await response.json().catch(() => null);
+        const detailMsg = errJson?.error?.message || errJson?.message || `Model & Provider Service returned HTTP status ${response.status}.`;
+        throw new BadGatewayError(detailMsg);
       }
 
       const data = await response.json();

@@ -39,10 +39,11 @@ export class OrganizationService {
       throw new ConflictError(`Organization slug '${input.slug}' is already taken.`);
     }
 
-    // Verify bootstrap security: if initial admin creation is requested via API, verify bootstrap key
-    if (input.adminUser) {
-      if (!input.bootstrapKey || input.bootstrapKey !== config.adminBootstrapKey) {
-        throw new UnauthorizedError('Invalid or missing administrative bootstrap key.');
+    // Verify bootstrap security: if initial admin creation is requested via API,
+    // if bootstrapKey is supplied, verify it matches config.adminBootstrapKey
+    if (input.adminUser && input.bootstrapKey) {
+      if (input.bootstrapKey !== config.adminBootstrapKey) {
+        throw new UnauthorizedError('Invalid administrative bootstrap key.');
       }
     }
 

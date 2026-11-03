@@ -28,10 +28,10 @@ import { logger } from '../utils/logger';
 import { getPermissionsForRole } from '../utils/permissions';
 
 // Precomputed dummy hash to prevent timing attacks during non-existent user login
-let DUMMY_HASH = '';
+let DUMMY_HASH = '$argon2id$v=19$m=65536,t=3,p=4$ZHVtbXlfc2FsdF9mb3JfdGltaW5n$dGVzdF9kdW1teV9oYXNoX2Zvcl90aW1pbmdfcHJvdGVjdGlvbg';
 hashPassword('dummy_timing_protection_password').then((h) => {
   DUMMY_HASH = h;
-});
+}).catch(() => {});
 
 export class AuthService {
   constructor(
@@ -42,7 +42,7 @@ export class AuthService {
 
   async login(
     input: LoginInput
-  ): Promise<{ user: SafeUser; tokens: TokenPair }> {
+  ): Promise<{ user: SafeUser; tokens: TokenPair; success?: boolean }> {
     const normalizedEmail = input.email.trim().toLowerCase();
     const user = await this.userRepo.findByEmail(normalizedEmail);
 
@@ -102,6 +102,7 @@ export class AuthService {
     };
 
     return {
+      success: true,
       user: safeUser,
       tokens: {
         accessToken,

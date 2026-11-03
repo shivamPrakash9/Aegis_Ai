@@ -3,8 +3,10 @@
 import { Router } from 'express';
 import {
   createUser,
+  deleteUser,
   disableUser,
   getUser,
+  getUserStats,
   listUsers,
   updateUser
 } from '../controllers/user.controller';
@@ -37,6 +39,12 @@ router.get(
 );
 
 router.get(
+  '/stats',
+  requirePermission('users:read'),
+  getUserStats
+);
+
+router.get(
   '/:userId',
   requirePermission('users:read'),
   getUser
@@ -53,6 +61,12 @@ router.post(
   '/:userId/disable',
   requirePermission('users:disable'),
   disableUser
+);
+
+router.delete(
+  '/:userId',
+  requirePermission('users:disable'),
+  deleteUser
 );
 
 export const userRoutes = router;

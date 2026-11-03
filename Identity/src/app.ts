@@ -10,6 +10,9 @@ import YAML from 'yaml';
 import { config } from './config/env';
 import { errorHandler, NotFoundError } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
+import { contentNegotiationMiddleware } from './middleware/contentNegotiation';
+import { etagCacheMiddleware } from './middleware/etagCache';
+import { cacheControl } from './middleware/cacheControl';
 import { mainRouter } from './routes';
 
 export const app = express();
@@ -27,7 +30,18 @@ app.use(
       return callback(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Correlation-Id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Correlation-Id', 'Accept', 'If-None-Match'],
+    exposedHeaders: [
+      'X-Correlation-Id',
+      'X-RateLimit-Limit',
+      'X-RateLimit-Remaining',
+      'X-RateLimit-Reset',
+      'RateLimit-Limit',
+      'RateLimit-Remaining',
+      'RateLimit-Reset',
+      'Retry-After',
+      'ETag'
+    ],
     credentials: true
   })
 );
@@ -39,6 +53,15 @@ app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 // Correlation ID & request logger
 app.use(requestLogger);
 
+// Content Negotiation: JSON and XML (Requirement 7)
+app.use(contentNegotiationMiddleware);
+
+// Deliberate Cache-Control on GET (Requirement 10)
+app.use(cacheControl('private-no-store'));
+
+// ETag and HTTP 304 Not Modified Support (Requirement 6)
+app.use(etagCacheMiddleware);
+
 // OpenAPI Documentation Route
 try {
   const openapiPath = path.resolve(__dirname, '../openapi/identity-service.yaml');
@@ -47,6 +70,7 @@ try {
     const swaggerDoc = YAML.parse(fileContent);
 
     app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
     app.get('/openapi.json', (_req: Request, res: Response) => {
       res.json(swaggerDoc);
     });

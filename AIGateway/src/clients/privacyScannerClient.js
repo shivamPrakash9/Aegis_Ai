@@ -29,59 +29,82 @@ class PrivacyScannerClient {
     }
 
     const url = `${this.baseUrl}/v1/scan`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), env.requestTimeoutMs);
+    const maxAttempts = 3;
+    let attempt = 0;
+    let lastError = null;
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Correlation-Id': correlationId || 'unknown'
-        },
-        body: JSON.stringify({
-          messages,
-          organizationId
-        }),
-        signal: controller.signal
-      });
+    while (attempt < maxAttempts) {
+      attempt++;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), env.requestTimeoutMs);
 
-      clearTimeout(timeoutId);
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Correlation-Id': correlationId || 'unknown'
+          },
+          body: JSON.stringify({
+            messages,
+            organizationId
+          }),
+          signal: controller.signal
+        });
 
-      if (!response.ok) {
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          if (response.status >= 500 && attempt < maxAttempts) {
+            const delay = 100 * Math.pow(2, attempt - 1);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+          throw new ServiceUnavailableError(
+            `Privacy Scanner service returned error status ${response.status}. Security boundary enforced: request halted.`
+          );
+        }
+
+        const data = await response.json();
+
+        if (!data || !data.action) {
+          throw new BadGatewayError('Privacy Scanner returned an invalid or empty decision.');
+        }
+
+        const validActions = ['ALLOW', 'BLOCK', 'MASK', 'ROUTE', 'REQUIRE_APPROVAL'];
+        if (!validActions.includes(data.action)) {
+          throw new BadGatewayError(`Privacy Scanner returned unrecognized action: ${data.action}`);
+        }
+
+        return data;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        lastError = err;
+
+        if (err instanceof ServiceUnavailableError || err instanceof BadGatewayError) {
+          if (attempt >= maxAttempts) throw err;
+        }
+
+        if (attempt < maxAttempts) {
+          const delay = 100 * Math.pow(2, attempt - 1);
+          logger.warn(
+            { correlationId, attempt, maxAttempts, delayMs: delay, err: err.message },
+            'Retrying Privacy Scanner request with exponential backoff'
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
+        logger.error(
+          { correlationId, err: err.message, service: 'PrivacyScanner' },
+          'Downstream failure during privacy scan'
+        );
+
+        // Mandatory Security Rule: NEVER forward unscanned content to a provider
         throw new ServiceUnavailableError(
-          `Privacy Scanner service returned error status ${response.status}. Security boundary enforced: request halted.`
+          'Privacy Scanner Service is currently unreachable. Request cannot be securely evaluated and has been aborted.'
         );
       }
-
-      const data = await response.json();
-
-      if (!data || !data.action) {
-        throw new BadGatewayError('Privacy Scanner returned an invalid or empty decision.');
-      }
-
-      const validActions = ['ALLOW', 'BLOCK', 'MASK', 'ROUTE', 'REQUIRE_APPROVAL'];
-      if (!validActions.includes(data.action)) {
-        throw new BadGatewayError(`Privacy Scanner returned unrecognized action: ${data.action}`);
-      }
-
-      return data;
-    } catch (err) {
-      clearTimeout(timeoutId);
-
-      if (err instanceof ServiceUnavailableError || err instanceof BadGatewayError) {
-        throw err;
-      }
-
-      logger.error(
-        { correlationId, err: err.message, service: 'PrivacyScanner' },
-        'Downstream failure during privacy scan'
-      );
-
-      // Mandatory Security Rule: NEVER forward unscanned content to a provider
-      throw new ServiceUnavailableError(
-        'Privacy Scanner Service is currently unreachable. Request cannot be securely evaluated and has been aborted.'
-      );
     }
   }
 

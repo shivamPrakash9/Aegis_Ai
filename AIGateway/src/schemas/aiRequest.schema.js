@@ -1,4 +1,5 @@
 // AJV Validation Schemas for AI Gateway APIs
+// Conforms to Web Services Assignment Module 2 Requirement 3
 
 const createAiRequestSchema = {
   type: 'object',
@@ -71,6 +72,26 @@ const listAiRequestsQuerySchema = {
       minimum: 1,
       maximum: 100,
       default: 20
+    },
+    cursor: {
+      type: 'string',
+      maxLength: 256
+    },
+    search: {
+      type: 'string',
+      maxLength: 128
+    },
+    q: {
+      type: 'string',
+      maxLength: 128
+    },
+    model: {
+      type: 'string',
+      maxLength: 128
+    },
+    provider: {
+      type: 'string',
+      maxLength: 64
     },
     startDate: {
       type: 'string',

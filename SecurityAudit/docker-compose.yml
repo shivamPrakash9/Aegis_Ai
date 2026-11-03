@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  security-audit-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis-security-audit-service
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+      - MONGODB_URI=mongodb://aegis-audit-mongodb:27017/aegis_audit
+      - MONGODB_DATABASE=aegis_audit
+      - INTERNAL_SERVICE_KEY=aegis_internal_service_secret_key_dev
+      - JWT_SECRET=aegis_jwt_shared_secret_dev
+      - AI_GATEWAY_URL=http://aegis-ai-gateway:3001
+      - IDENTITY_SERVICE_URL=http://aegis-identity-service:3000
+    depends_on:
+      - aegis-audit-mongodb
+    networks:
+      - aegis-network
+
+  aegis-audit-mongodb:
+    image: mongo:7.0
+    container_name: aegis-audit-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=aegis_audit
+    volumes:
+      - aegis_audit_mongodb_data:/data/db
+    networks:
+      - aegis-network
+
+volumes:
+  aegis_audit_mongodb_data:
+    driver: local
+
+networks:
+  aegis-network:
+    driver: bridge

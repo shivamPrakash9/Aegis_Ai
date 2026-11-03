@@ -29,6 +29,19 @@ export async function listUsers(
   }
 }
 
+export async function getUserStats(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const result = await userService.getUserStats(req.principal!);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getUser(
   req: Request,
   res: Response,
@@ -66,6 +79,20 @@ export async function disableUser(
     const userId = req.params.userId as string;
     const result = await userService.disableUser(req.principal!, userId);
     res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteUser(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const userId = req.params.userId as string;
+    await userService.deleteUser(req.principal!, userId);
+    res.status(200).json({ success: true, message: 'User deleted successfully.' });
   } catch (error) {
     next(error);
   }

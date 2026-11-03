@@ -186,6 +186,7 @@ class RequestPipelineService {
         principal,
         messages: privacyEnforcement.effectiveMessages,
         modelPreference: payload.modelPreference,
+        requestId,
         correlationId
       });
     } catch (policyErr) {
@@ -203,8 +204,17 @@ class RequestPipelineService {
 
     if (!policyEnforcement.proceedWithInvocation) {
       const finalStatus = policyEnforcement.finalStatus || 'BLOCKED';
+      const approvalMeta = {
+        ...(payload.metadata || {}),
+        approvalId: policyResult.approvalId || null,
+        effectiveMessages: privacyEnforcement.effectiveMessages,
+        modelPreference: payload.modelPreference || {},
+        routingConstraints: privacyEnforcement.routingConstraints || {}
+      };
+
       await this.repo.updateStatus(requestId, organizationId, finalStatus, {
         policyDecision: policyResult.decision,
+        metadata: approvalMeta,
         errorCode: finalStatus === 'BLOCKED' ? 'GOVERNANCE_POLICY_DENIAL' : undefined,
         errorMessage: policyEnforcement.reason
       });
@@ -243,12 +253,23 @@ class RequestPipelineService {
       });
 
       // 13. Apply response privacy filtering
-      const rawContent = modelResult.choices?.[0]?.message?.content || '';
+      const rawContent =
+        modelResult.choices?.[0]?.message?.content ??
+        modelResult.choices?.[0]?.text ??
+        modelResult.content ??
+        modelResult.result ??
+        modelResult.response ??
+        '';
       const safeSanitizedContent = this.enforcer.filterModelResponse(rawContent);
+
+      const promptSummary = (privacyEnforcement.effectiveMessages || [])
+        .map((m) => `[${m.role}]: ${m.content}`)
+        .join('\n');
 
       // 14. Persist Final Safe Status and Sanitized Result Metadata
       await this.repo.updateStatus(requestId, organizationId, 'COMPLETED', {
         modelSelected: modelResult.model || payload.modelPreference?.model || 'default-model',
+        sanitizedPromptSummary: promptSummary,
         sanitizedResult: safeSanitizedContent
       });
 
@@ -296,6 +317,173 @@ class RequestPipelineService {
     return {
       statusCode: 202,
       body: acceptedResponse
+    };
+  }
+
+  /**
+   * Resumes an AI Request previously waiting for human approval.
+   *
+   * @param {object} params
+   * @param {string} params.requestId
+   * @param {string} params.organizationId
+   * @param {object} params.principal
+   * @param {string} params.correlationId
+   * @returns {Promise<object>}
+   */
+  async resumeRequest({ requestId, organizationId, principal, correlationId }) {
+    const existing = await this.repo.findById(requestId, organizationId);
+    if (!existing) {
+      throw new BadRequestError(`AI Request with ID '${requestId}' not found in caller organization.`);
+    }
+
+    if (existing.status !== 'WAITING_FOR_APPROVAL') {
+      throw new BadRequestError(`Cannot resume request with status '${existing.status}'. Expected 'WAITING_FOR_APPROVAL'.`);
+    }
+
+    let meta = {};
+    try {
+      meta = typeof existing.metadata === 'string' ? JSON.parse(existing.metadata) : (existing.metadata || {});
+    } catch {
+      meta = {};
+    }
+
+    const approvalId = meta.approvalId;
+    if (!approvalId) {
+      throw new BadRequestError('No approvalId associated with this waiting request.');
+    }
+
+    // Check approval status in PolicyApproval service
+    const approval = await this.policy.getApproval(approvalId, organizationId, correlationId);
+
+    if (approval.status === 'PENDING') {
+      return {
+        statusCode: 200,
+        body: {
+          requestId: existing.id,
+          status: 'WAITING_FOR_APPROVAL',
+          approvalStatus: 'PENDING',
+          message: 'Approval is still pending review.'
+        }
+      };
+    }
+
+    if (approval.status === 'REJECTED') {
+      await this.repo.updateStatus(requestId, organizationId, 'BLOCKED', {
+        errorMessage: `Request rejected by approver: ${approval.decisionReason || 'Denied'}`
+      });
+
+      await this.audit.emitSecurityEvent({
+        eventType: 'AI_REQUEST_BLOCKED_POLICY',
+        traceId: existing.traceId,
+        requestId: existing.id,
+        organizationId,
+        callerId: principal.id,
+        severity: 'WARN',
+        details: { reason: approval.decisionReason || 'Approval rejected' },
+        correlationId
+      });
+
+      return {
+        statusCode: 200,
+        body: {
+          requestId: existing.id,
+          status: 'BLOCKED',
+          approvalStatus: 'REJECTED',
+          message: 'Request was rejected by designated reviewer.'
+        }
+      };
+    }
+
+    if (approval.status === 'APPROVED') {
+      // Proceed with Model Invocation
+      await this.repo.updateStatus(requestId, organizationId, 'PROCESSING');
+
+      const effectiveMessages = meta.effectiveMessages || [];
+      const modelPreference = meta.modelPreference || {};
+      const routingConstraints = meta.routingConstraints || {};
+
+      try {
+        const modelResult = await this.model.invokeModel({
+          messages: effectiveMessages,
+          modelPreference,
+          routingConstraints,
+          organizationId,
+          traceId: existing.traceId,
+          correlationId
+        });
+
+        const rawContent =
+          modelResult.choices?.[0]?.message?.content ??
+          modelResult.choices?.[0]?.text ??
+          modelResult.content ??
+          modelResult.result ??
+          modelResult.response ??
+          '';
+        const safeSanitizedContent = this.enforcer.filterModelResponse(rawContent);
+
+        const promptSummary = (effectiveMessages || [])
+          .map((m) => `[${m.role}]: ${m.content}`)
+          .join('\n');
+
+        await this.repo.updateStatus(requestId, organizationId, 'COMPLETED', {
+          modelSelected: modelResult.model || modelPreference.model || 'default-model',
+          sanitizedPromptSummary: promptSummary,
+          sanitizedResult: safeSanitizedContent
+        });
+
+        await this.audit.emitSecurityEvent({
+          eventType: 'AI_REQUEST_COMPLETED',
+          traceId: existing.traceId,
+          requestId: existing.id,
+          organizationId,
+          callerId: principal.id,
+          severity: 'INFO',
+          details: {
+            model: modelResult.model,
+            provider: modelResult.provider,
+            tokens: modelResult.usage?.totalTokens
+          },
+          correlationId
+        });
+
+        return {
+          statusCode: 200,
+          body: {
+            requestId: existing.id,
+            status: 'COMPLETED',
+            approvalStatus: 'APPROVED',
+            modelSelected: modelResult.model,
+            sanitizedResult: safeSanitizedContent
+          }
+        };
+      } catch (modelErr) {
+        await this.repo.updateStatus(requestId, organizationId, 'FAILED', {
+          errorCode: modelErr.code || 'MODEL_INVOCATION_FAILED',
+          errorMessage: modelErr.message
+        });
+
+        await this.audit.emitSecurityEvent({
+          eventType: 'AI_REQUEST_FAILED',
+          traceId: existing.traceId,
+          requestId: existing.id,
+          organizationId,
+          callerId: principal.id,
+          severity: 'WARN',
+          details: { error: modelErr.message },
+          correlationId
+        });
+
+        throw modelErr;
+      }
+    }
+
+    return {
+      statusCode: 200,
+      body: {
+        requestId: existing.id,
+        status: existing.status,
+        approvalStatus: approval.status
+      }
     };
   }
 }

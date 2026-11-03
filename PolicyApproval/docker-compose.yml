@@ -1,0 +1,57 @@
+services:
+  policy-approval-db:
+    image: postgres:16-alpine
+    container_name: aegis_policy_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aegis_policy
+      POSTGRES_USER: aegis_policy_user
+      POSTGRES_PASSWORD: aegis_policy_secure_password
+    ports:
+      - "5435:5432"
+    volumes:
+      - policy_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis_policy_user -d aegis_policy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aegis_network
+
+  policy-approval:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis_policy_approval
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      NODE_ENV: production
+      POLICY_DATABASE_URL: "postgresql://aegis_policy_user:aegis_policy_secure_password@policy-approval-db:5432/aegis_policy?schema=public"
+      POLICY_JWT_SECRET: "aegis_policy_dev_jwt_secret_change_in_production"
+      POLICY_JWT_ISSUER: "aegis-identity"
+      POLICY_JWT_AUDIENCE: "aegis-policy"
+      INTERNAL_SERVICE_KEY: "aegis_internal_service_key_dev_only"
+      IDENTITY_SERVICE_URL: "http://host.docker.internal:3000"
+      AI_GATEWAY_URL: "http://host.docker.internal:3001"
+      PRIVACY_SCANNER_URL: "http://host.docker.internal:3002"
+      MAX_REQUEST_BODY_BYTES: 1048576
+      MAX_RULES_PER_POLICY: 50
+      MAX_CONDITION_DEPTH: 5
+      REQUEST_TIMEOUT_MS: 15000
+      LOG_LEVEL: info
+    depends_on:
+      policy-approval-db:
+        condition: service_healthy
+    networks:
+      - aegis_network
+
+volumes:
+  policy_pgdata:
+
+networks:
+  aegis_network:
+    external: true

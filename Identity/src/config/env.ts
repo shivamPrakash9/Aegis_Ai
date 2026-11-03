@@ -3,6 +3,11 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+if (!process.env.IDENTITY_DATABASE_URL) {
+  process.env.IDENTITY_DATABASE_URL =
+    'postgresql://aegis_identity_user:aegis_identity_secure_password@localhost:5432/aegis_identity?schema=public';
+}
+
 export interface AppConfig {
   port: number;
   nodeEnv: string;
@@ -21,7 +26,7 @@ export interface AppConfig {
 }
 
 export function loadAndValidateConfig(): AppConfig {
-  const port = parseInt(process.env.PORT || '3001', 10);
+  const port = parseInt(process.env.PORT || '3000', 10);
   const nodeEnv = process.env.NODE_ENV || 'development';
   const corsOrigins = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)

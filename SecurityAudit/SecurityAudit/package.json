@@ -1,0 +1,46 @@
+{
+  "name": "aegis-security-audit",
+  "version": "1.0.0",
+  "description": "AegisAI Enterprise Security & Audit Microservice",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "jest --runInBand --detectOpenHandles --forceExit",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration --runInBand --detectOpenHandles --forceExit",
+    "test:security": "jest tests/security --runInBand --detectOpenHandles --forceExit"
+  },
+  "keywords": [
+    "aegis-ai",
+    "security-audit",
+    "audit-logging",
+    "mongodb",
+    "tamper-evidence",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.0.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.13.0",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0",
+    "pino-pretty": "^13.0.0",
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^10.0.0",
+    "xmlbuilder2": "^4.0.3",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  }
+}

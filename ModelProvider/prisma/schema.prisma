@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("MODEL_DATABASE_URL")
+}
+
+model ModelConfig {
+  id                 String   @id
+  modelId            String   @unique
+  provider           String
+  providerModelName  String
+  enabled            Boolean  @default(true)
+  isDefault          Boolean  @default(false)
+  maxTokens          Int      @default(4096)
+  contextWindow      Int      @default(128000)
+  defaultTemperature Float    @default(0.7)
+  capabilities       String   @default("[\"chat\"]")
+  description        String?
+  version            Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([provider, enabled])
+  @@index([enabled])
+}
+
+model CompletionUsage {
+  id               String   @id
+  requestId        String?
+  traceId          String?
+  organizationId   String
+  callerId         String?
+  provider         String
+  model            String
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalTokens      Int      @default(0)
+  latencyMs        Int      @default(0)
+  status           String   @default("COMPLETED")
+  errorCode        String?
+  createdAt        DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([requestId])
+  @@index([traceId])
+  @@index([provider, model])
+}
+
+model ProviderConfig {
+  id          String   @id
+  name        String
+  type        String   @default("openai") // openai, anthropic, mock, custom
+  baseUrl     String?
+  apiKey      String?
+  enabled     Boolean  @default(true)
+  isHealthy   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([enabled])
+}

@@ -1,0 +1,281 @@
+openapi: 3.1.0
+info:
+  title: AegisAI Model & Provider Microservice API
+  version: 1.0.0
+  description: >
+    Enterprise AI model execution and multi-provider abstraction layer for AegisAI.
+    Provides unified chat completions, strict model allowlisting, SSRF protection,
+    and operational usage telemetry across OpenAI, Anthropic Claude, and Mock providers.
+servers:
+  - url: http://localhost:3004
+    description: Local Development Server
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness probe
+      operationId: getLive
+      tags: [Health]
+      responses:
+        '200':
+          description: Service process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "UP" }
+                  service: { type: string, example: "ModelProvider" }
+                  timestamp: { type: string, format: date-time }
+
+  /health/ready:
+    get:
+      summary: Readiness probe
+      operationId: getReady
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is healthy and database is reachable
+        '503':
+          description: Service degraded, database is unreachable
+
+  /v1/chat/completions:
+    post:
+      summary: Create chat completion
+      operationId: createChatCompletion
+      tags: [Chat Completions]
+      security:
+        - BearerAuth: []
+        - InternalServiceKey: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages, organizationId]
+              properties:
+                organizationId: { type: string, example: "org_enterprise_alpha" }
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    required: [role, content]
+                    properties:
+                      role: { type: string, enum: [user, assistant, system, developer, tool] }
+                      content: { type: string, example: "Explain quantum encryption." }
+                model: { type: string, example: "gpt-4o-mini" }
+                modelPreference:
+                  type: object
+                  properties:
+                    provider: { type: string, example: "openai" }
+                    model: { type: string, example: "gpt-4o" }
+                routingConstraints:
+                  type: object
+                  properties:
+                    allowedProviders:
+                      type: array
+                      items: { type: string }
+                temperature: { type: number, minimum: 0, maximum: 2, default: 0.7 }
+                max_tokens: { type: integer, example: 1000 }
+                stop:
+                  oneOf:
+                    - { type: string }
+                    - { type: array, items: { type: string } }
+                requestId: { type: string, example: "req_xyz_123" }
+                traceId: { type: string, example: "trace_xyz_123" }
+      responses:
+        '200':
+          description: Successful completion
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, object, model, provider, choices, usage]
+                properties:
+                  id: { type: string, example: "chatcmpl_12345" }
+                  object: { type: string, example: "chat.completion" }
+                  created: { type: integer, example: 1729380000 }
+                  model: { type: string, example: "gpt-4o-mini" }
+                  provider: { type: string, example: "openai" }
+                  choices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index: { type: integer, example: 0 }
+                        message:
+                          type: object
+                          properties:
+                            role: { type: string, example: "assistant" }
+                            content: { type: string, example: "Quantum encryption uses quantum mechanics..." }
+                        finish_reason: { type: string, example: "stop" }
+                  usage:
+                    type: object
+                    properties:
+                      promptTokens: { type: integer, example: 25 }
+                      completionTokens: { type: integer, example: 40 }
+                      totalTokens: { type: integer, example: 65 }
+                      prompt_tokens: { type: integer, example: 25 }
+                      completion_tokens: { type: integer, example: 40 }
+                      total_tokens: { type: integer, example: 65 }
+        '400':
+          description: Validation error or malformed payload
+        '403':
+          description: Model disabled or provider restricted
+        '404':
+          description: Model not found in registry
+        '429':
+          description: Rate limit exceeded
+        '502':
+          description: Upstream provider failure
+        '504':
+          description: Upstream provider timeout
+
+  /v1/models:
+    get:
+      summary: List registered models
+      operationId: listModels
+      tags: [Model Catalog]
+      parameters:
+        - name: enabled
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: List of models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { type: string, example: "list" }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ModelConfig'
+
+    post:
+      summary: Register or update model configuration
+      operationId: registerModel
+      tags: [Model Catalog]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelConfig'
+      responses:
+        '201':
+          description: Model registered
+        '403':
+          description: Forbidden
+
+  /v1/models/{id}:
+    get:
+      summary: Retrieve specific model details
+      operationId: getModel
+      tags: [Model Catalog]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Model details
+        '404':
+          description: Model not found
+
+  /v1/models/{id}/enable:
+    post:
+      summary: Enable a model
+      operationId: enableModel
+      tags: [Model Catalog]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Model enabled
+
+  /v1/models/{id}/disable:
+    post:
+      summary: Disable a model
+      operationId: disableModel
+      tags: [Model Catalog]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Model disabled
+
+  /v1/usage:
+    get:
+      summary: Query operational usage statistics for organization
+      operationId: getUsage
+      tags: [Usage Telemetry]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: organizationId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: model
+          in: query
+          schema: { type: string }
+        - name: provider
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Usage telemetry records
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    InternalServiceKey:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Key
+
+  schemas:
+    ModelConfig:
+      type: object
+      required: [modelId, provider]
+      properties:
+        modelId: { type: string, example: "gpt-4o" }
+        provider: { type: string, example: "openai" }
+        providerModelName: { type: string, example: "gpt-4o-2024-08-06" }
+        enabled: { type: boolean, default: true }
+        isDefault: { type: boolean, default: false }
+        maxTokens: { type: integer, default: 4096 }
+        contextWindow: { type: integer, default: 128000 }
+        defaultTemperature: { type: number, default: 0.7 }
+        capabilities:
+          type: array
+          items: { type: string }
+          example: ["chat", "reasoning"]
+        description: { type: string, example: "High-intelligence model" }

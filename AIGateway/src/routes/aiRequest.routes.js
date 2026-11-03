@@ -5,7 +5,8 @@ const {
   submitAiRequest,
   getAiRequestById,
   listAiRequests,
-  getAiRequestTrace
+  getAiRequestTrace,
+  resumeAiRequest
 } = require('../controllers/aiRequest.controller');
 const { authenticate } = require('../middleware/authenticate');
 const { validate } = require('../middleware/validate');
@@ -46,6 +47,13 @@ router.get(
   '/:id/trace',
   validate(requestIdParamSchema, 'params'),
   getAiRequestTrace
+);
+
+// Resume Approved AI Request (POST /v1/ai-requests/:id/resume)
+router.post(
+  '/:id/resume',
+  validate(requestIdParamSchema, 'params'),
+  resumeAiRequest
 );
 
 module.exports = { aiRequestRoutes: router };

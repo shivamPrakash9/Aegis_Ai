@@ -57,21 +57,74 @@ export class UserService {
   async listUsers(
     principal: AuthenticatedPrincipal,
     query: PaginationQuery
-  ): Promise<{ users: SafeUser[]; total: number; page: number; limit: number }> {
-    const page = query.page && query.page > 0 ? query.page : 1;
-    const limit = query.limit && query.limit > 0 ? query.limit : 20;
+  ): Promise<{
+    success: boolean;
+    users: SafeUser[];
+    data: SafeUser[];
+    total: number;
+    page: number;
+    limit: number;
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const page = Math.max(1, parseInt(String(query.page || 1), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(query.limit || 20), 10) || 20));
     const skip = (page - 1) * limit;
 
     const { users, total } = await this.userRepo.listByOrganization(
       principal.organizationId,
-      { skip, limit }
+      {
+        skip,
+        limit,
+        search: query.search ? String(query.search).trim() : undefined,
+        role: query.role as any,
+        status: query.status as any
+      }
     );
 
+    const totalPages = Math.ceil(total / limit) || 1;
+    const formatted = users.map(this.formatUser);
+
     return {
-      users: users.map(this.formatUser),
+      success: true,
+      users: formatted,
+      data: formatted,
       total,
       page,
-      limit
+      limit,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages
+      }
+    };
+  }
+
+  async getUserStats(
+    principal: AuthenticatedPrincipal
+  ): Promise<{
+    success: boolean;
+    data: {
+      total: number;
+      developers: number;
+      auditors: number;
+      admins: number;
+    };
+    total: number;
+    developers: number;
+    auditors: number;
+    admins: number;
+  }> {
+    const stats = await this.userRepo.getStatsByOrganization(principal.organizationId);
+    return {
+      success: true,
+      data: stats,
+      ...stats
     };
   }
 
@@ -129,6 +182,24 @@ export class UserService {
     await this.refreshRepo.revokeAllForUser(userId);
 
     return this.formatUser(disabled);
+  }
+
+  async deleteUser(
+    principal: AuthenticatedPrincipal,
+    userId: string
+  ): Promise<void> {
+    if (principal.role !== 'ORGANIZATION_ADMIN') {
+      throw new ForbiddenError('Only Organization Admins can remove organization members.');
+    }
+    if (principal.id === userId) {
+      throw new ForbiddenError('Cannot remove yourself as an organization admin.');
+    }
+    const user = await this.userRepo.findById(userId, principal.organizationId);
+    if (!user) {
+      throw new NotFoundError('User not found.');
+    }
+    await this.refreshRepo.revokeAllForUser(userId);
+    await this.userRepo.deleteUser(userId, principal.organizationId);
   }
 
   private formatUser(user: User): SafeUser {
