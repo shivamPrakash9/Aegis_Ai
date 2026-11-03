@@ -1,0 +1,61 @@
+services:
+  model-provider-db:
+    image: postgres:16-alpine
+    container_name: aegis_model_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aegis_model
+      POSTGRES_USER: aegis_model_user
+      POSTGRES_PASSWORD: aegis_model_secure_password
+    ports:
+      - "5436:5432"
+    volumes:
+      - model_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis_model_user -d aegis_model"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aegis_network
+
+  model-provider:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis_model_provider
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      NODE_ENV: production
+      MODEL_DATABASE_URL: "postgresql://aegis_model_user:aegis_model_secure_password@model-provider-db:5432/aegis_model?schema=public"
+      MODEL_JWT_SECRET: "aegis_model_dev_jwt_secret_change_in_production"
+      MODEL_JWT_ISSUER: "aegis-identity"
+      MODEL_JWT_AUDIENCE: "aegis-model"
+      INTERNAL_SERVICE_KEY: "aegis_internal_service_key_dev_only"
+      IDENTITY_SERVICE_URL: "http://host.docker.internal:3000"
+      AI_GATEWAY_URL: "http://host.docker.internal:3001"
+      OPENAI_API_KEY: ""
+      OPENAI_BASE_URL: "https://api.openai.com/v1"
+      ANTHROPIC_API_KEY: ""
+      ANTHROPIC_BASE_URL: "https://api.anthropic.com"
+      DEFAULT_MODEL: "gpt-4o-mini"
+      DEFAULT_PROVIDER: "openai"
+      ALLOWED_PROVIDER_HOSTS: "api.openai.com,api.anthropic.com,127.0.0.1,localhost"
+      PROVIDER_TIMEOUT_MS: 30000
+      MAX_REQUEST_BODY_BYTES: 1048576
+      LOG_LEVEL: info
+    depends_on:
+      model-provider-db:
+        condition: service_healthy
+    networks:
+      - aegis_network
+
+volumes:
+  model_pgdata:
+
+networks:
+  aegis_network:
+    external: true
