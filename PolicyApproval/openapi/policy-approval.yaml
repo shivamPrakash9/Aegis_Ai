@@ -1,0 +1,342 @@
+openapi: 3.1.0
+info:
+  title: AegisAI Policy & Approval Microservice API
+  version: 1.0.0
+  description: >
+    Enterprise AI governance, policy evaluation, and human approval workflow service for AegisAI.
+    Enforces deterministic rule evaluation (DENY > REQUIRE_APPROVAL > ALLOW) without dynamic code evaluation.
+servers:
+  - url: http://localhost:3003
+    description: Local Development Server
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness probe
+      operationId: getLive
+      tags: [Health]
+      responses:
+        '200':
+          description: Service process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "UP" }
+                  service: { type: string, example: "PolicyApproval" }
+                  timestamp: { type: string, format: date-time }
+
+  /health/ready:
+    get:
+      summary: Readiness probe
+      operationId: getReady
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is healthy and database is reachable
+        '503':
+          description: Service degraded, database is unreachable
+
+  /v1/evaluate:
+    post:
+      summary: Evaluate governance policies against an AI request
+      operationId: evaluatePolicies
+      tags: [Governance Evaluation]
+      security:
+        - BearerAuth: []
+        - InternalServiceKey: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId]
+              properties:
+                organizationId: { type: string, example: "org_enterprise_alpha" }
+                principal:
+                  type: object
+                  properties:
+                    id: { type: string, example: "usr_123" }
+                    role: { type: string, example: "MEMBER" }
+                    type: { type: string, example: "USER" }
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role: { type: string, example: "user" }
+                      content: { type: string, example: "Generate high-level design" }
+                modelPreference:
+                  type: object
+                  properties:
+                    provider: { type: string, example: "openai" }
+                    model: { type: string, example: "gpt-4o" }
+                metadata: { type: object }
+                requestId: { type: string, example: "req_xyz_123" }
+      responses:
+        '200':
+          description: Evaluation decision resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decision, violations, requiredApprovers]
+                properties:
+                  decision:
+                    type: string
+                    enum: [ALLOW, DENY, REQUIRE_APPROVAL]
+                  policyVersion: { type: integer, example: 1 }
+                  reasonCode: { type: string, example: "APPROVAL_REQUIRED_FRONTIER_MODEL" }
+                  reason: { type: string, example: "Usage of GPT-4o requires manager approval" }
+                  violations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        policyId: { type: string }
+                        rule: { type: string }
+                        reason: { type: string }
+                  requiredApprovers:
+                    type: array
+                    items: { type: string }
+                  approvalId: { type: string, example: "appr_12345" }
+                  evaluationId: { type: string, example: "eval_67890" }
+        '400':
+          description: Malformed request payload
+
+  /v1/policies:
+    post:
+      summary: Create a new policy with version 1
+      operationId: createPolicy
+      tags: [Policy Management]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, rules]
+              properties:
+                organizationId: { type: string }
+                name: { type: string, example: "Model Whitelist Policy" }
+                description: { type: string }
+                category: { type: string, example: "MODEL_GOVERNANCE" }
+                priority: { type: integer, default: 100 }
+                rules:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PolicyRule'
+      responses:
+        '201':
+          description: Policy created successfully
+        '403':
+          description: Insufficient permissions
+
+    get:
+      summary: List policies for current organization
+      operationId: listPolicies
+      tags: [Policy Management]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, INACTIVE, DRAFT, ARCHIVED] }
+      responses:
+        '200':
+          description: Paginated list of policies
+
+  /v1/policies/{id}:
+    get:
+      summary: Retrieve specific policy by ID
+      operationId: getPolicyById
+      tags: [Policy Management]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Policy details
+        '404':
+          description: Policy not found
+
+  /v1/policies/{id}/versions:
+    post:
+      summary: Publish a new immutable version of an existing policy
+      operationId: createPolicyVersion
+      tags: [Policy Management]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rules]
+              properties:
+                rules:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PolicyRule'
+                description: { type: string }
+                activate: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Policy version created
+        '404':
+          description: Policy not found
+
+  /v1/policies/{id}/activate:
+    post:
+      summary: Activate a policy
+      operationId: activatePolicy
+      tags: [Policy Management]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Policy activated
+
+  /v1/policies/{id}/deactivate:
+    post:
+      summary: Deactivate a policy
+      operationId: deactivatePolicy
+      tags: [Policy Management]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Policy deactivated
+
+  /v1/approvals:
+    get:
+      summary: List human approval requests
+      operationId: listApprovals
+      tags: [Approval Workflow]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [PENDING, APPROVED, REJECTED, EXPIRED] }
+      responses:
+        '200':
+          description: List of approval requests
+
+  /v1/approvals/{id}:
+    get:
+      summary: Get details of an approval request
+      operationId: getApprovalById
+      tags: [Approval Workflow]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Approval request details
+        '404':
+          description: Approval request not found
+
+  /v1/approvals/{id}/decision:
+    post:
+      summary: Submit human approval or rejection decision
+      operationId: submitApprovalDecision
+      tags: [Approval Workflow]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  type: string
+                  enum: [APPROVED, REJECTED, APPROVE, REJECT]
+                reason: { type: string }
+      responses:
+        '200':
+          description: Decision recorded
+        '403':
+          description: Self-approval violation or unauthorized approver
+        '409':
+          description: Approval already finalized
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    InternalServiceKey:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Key
+
+  schemas:
+    PolicyRule:
+      type: object
+      required: [id, name, effect, condition, reason]
+      properties:
+        id: { type: string, example: "rule-frontier-approval" }
+        name: { type: string, example: "Frontier Model Gate" }
+        effect:
+          type: string
+          enum: [ALLOW, DENY, REQUIRE_APPROVAL]
+        priority: { type: integer, default: 100 }
+        condition:
+          type: object
+          description: AST condition object supporting all, any, not, eq, neq, in, notIn, contains, gt, gte, lt, lte, exists, has_role
+        reason: { type: string, example: "Requires security sign-off" }
+        reasonCode: { type: string, example: "APPROVAL_REQUIRED_SECURITY" }
+        requiredApprovers:
+          type: array
+          items: { type: string }

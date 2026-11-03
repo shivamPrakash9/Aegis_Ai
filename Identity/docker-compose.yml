@@ -1,0 +1,46 @@
+services:
+  identity-db:
+    image: postgres:16-alpine
+    container_name: aegis_identity_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aegis_identity
+      POSTGRES_USER: aegis_id_user
+      POSTGRES_PASSWORD: aegis_id_secure_password_placeholder
+    ports:
+      - "5432:5432"
+    volumes:
+      - aegis_identity_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis_id_user -d aegis_identity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis_identity_service
+    restart: unless-stopped
+    depends_on:
+      identity-db:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+      IDENTITY_DATABASE_URL: postgresql://aegis_id_user:aegis_id_secure_password_placeholder@identity-db:5432/aegis_identity?schema=public
+      JWT_ACCESS_SECRET: placeholder_jwt_access_secret_min_32_characters_for_prod!
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_SECRET: placeholder_jwt_refresh_secret_min_32_characters_for_prod!
+      JWT_REFRESH_TTL: 7d
+      JWT_ISSUER: aegis-identity-service
+      JWT_AUDIENCE: aegis-gateway
+      ADMIN_BOOTSTRAP_KEY: bootstrap_secret_change_me_in_production_min_32_chars
+      CORS_ORIGINS: "*"
+    ports:
+      - "3001:3001"
+
+volumes:
+  aegis_identity_pgdata:
+    driver: local
