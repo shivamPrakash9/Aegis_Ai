@@ -56,7 +56,7 @@ export const ModelsPage: React.FC = () => {
   const [isRegisterProviderOpen, setIsRegisterProviderOpen] = useState(false);
   const [newProviderId, setNewProviderId] = useState('');
   const [newProviderName, setNewProviderName] = useState('');
-  const [newProviderType, setNewProviderType] = useState<'openai' | 'anthropic' | 'mock' | 'custom'>('openai');
+  const [newProviderType, setNewProviderType] = useState<'openai' | 'anthropic' | 'gemini' | 'mock' | 'custom'>('gemini');
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState('');
   const [newProviderApiKey, setNewProviderApiKey] = useState('');
 
@@ -875,6 +875,7 @@ export const ModelsPage: React.FC = () => {
                   value={newProviderType}
                   onChange={(e) => setNewProviderType(e.target.value as any)}
                 >
+                  <option value="gemini">Google Gemini</option>
                   <option value="openai">OpenAI / OpenAI-Compatible</option>
                   <option value="anthropic">Anthropic Claude</option>
                   <option value="mock">Mock Provider (Local Dev)</option>
@@ -901,6 +902,8 @@ export const ModelsPage: React.FC = () => {
                 placeholder={
                   newProviderType === 'anthropic'
                     ? 'https://api.anthropic.com'
+                    : newProviderType === 'gemini'
+                    ? 'https://generativelanguage.googleapis.com'
                     : 'http://127.0.0.1:11434/v1 or https://api.openai.com/v1'
                 }
                 value={newProviderBaseUrl}

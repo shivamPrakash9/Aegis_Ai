@@ -3,16 +3,65 @@
 const { mockProvider } = require('../providers/mock.provider');
 const { openAiCompatibleProvider } = require('../providers/openaiCompatible.provider');
 const { anthropicProvider } = require('../providers/anthropic.provider');
+const { geminiProvider, GeminiProvider } = require('../providers/gemini.provider');
 const { ModelNotFoundError, ForbiddenError, ServiceUnavailableError } = require('../utils/errors');
 const { env } = require('../config/env');
 
 const DEFAULT_CATALOG = [
   {
+    modelId: 'gemini-3.5-flash-lite',
+    provider: 'gemini',
+    providerModelName: 'gemini-3.5-flash-lite',
+    enabled: true,
+    isDefault: Boolean(env.geminiApiKey),
+    maxTokens: 8192,
+    contextWindow: 1000000,
+    defaultTemperature: 0.7,
+    capabilities: ['chat', 'reasoning', 'coding'],
+    description: 'Google Gemini 3.5 Flash Lite - Ultra-fast and highly capable multimodal model'
+  },
+  {
+    modelId: 'gemini-3.1-flash-lite',
+    provider: 'gemini',
+    providerModelName: 'gemini-3.1-flash-lite',
+    enabled: true,
+    isDefault: false,
+    maxTokens: 8192,
+    contextWindow: 1000000,
+    defaultTemperature: 0.7,
+    capabilities: ['chat', 'reasoning', 'coding'],
+    description: 'Google Gemini 3.1 Flash Lite - Fast, high-efficiency model'
+  },
+  {
+    modelId: 'gemini-flash-lite-latest',
+    provider: 'gemini',
+    providerModelName: 'gemini-flash-lite-latest',
+    enabled: true,
+    isDefault: false,
+    maxTokens: 8192,
+    contextWindow: 1000000,
+    defaultTemperature: 0.7,
+    capabilities: ['chat', 'reasoning'],
+    description: 'Latest Google Gemini Flash Lite preview'
+  },
+  {
+    modelId: 'gemini',
+    provider: 'gemini',
+    providerModelName: env.geminiModel || 'gemini-3.5-flash-lite',
+    enabled: true,
+    isDefault: false,
+    maxTokens: 8192,
+    contextWindow: 1000000,
+    defaultTemperature: 0.7,
+    capabilities: ['chat', 'reasoning', 'coding'],
+    description: 'Google Gemini (default configured model)'
+  },
+  {
     modelId: 'gpt-4o',
     provider: env.isTest ? 'openai' : (env.openaiApiKey ? 'openai' : (env.groqApiKey ? 'groq' : 'openai')),
     providerModelName: env.openaiApiKey ? 'gpt-4o-2024-08-06' : (env.groqApiKey ? 'openai/gpt-oss-120b' : 'gpt-4o-2024-08-06'),
     enabled: true,
-    isDefault: true,
+    isDefault: !env.geminiApiKey,
     maxTokens: 4096,
     contextWindow: 128000,
     defaultTemperature: 0.7,
@@ -138,6 +187,7 @@ class ProviderRegistryService {
     this.registerProvider(mockProvider);
     this.registerProvider(openAiCompatibleProvider);
     this.registerProvider(anthropicProvider);
+    this.registerProvider(geminiProvider);
 
     if (env.groqApiKey) {
       this.registerProvider(
@@ -163,7 +213,14 @@ class ProviderRegistryService {
     let adapter;
     const providerType = String(type).toLowerCase().trim();
 
-    if (providerType === 'anthropic') {
+    if (providerType === 'gemini') {
+      adapter = new GeminiProvider({
+        id: key,
+        name: name || key,
+        apiKey: apiKey || '',
+        baseUrl: baseUrl || 'https://generativelanguage.googleapis.com'
+      });
+    } else if (providerType === 'anthropic') {
       adapter = new anthropicProvider.constructor({
         id: key,
         name: name || key,

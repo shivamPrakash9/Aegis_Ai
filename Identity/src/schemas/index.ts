@@ -88,6 +88,27 @@ export const loginSchema: JSONSchemaType<LoginInput> = {
   additionalProperties: false
 };
 
+export interface RegisterInput {
+  displayName: string;
+  email: string;
+  password: string;
+  organizationName?: string;
+  organizationId?: string;
+}
+
+export const registerSchema: JSONSchemaType<RegisterInput> = {
+  type: 'object',
+  properties: {
+    displayName: { type: 'string', minLength: 1, maxLength: 100 },
+    email: { type: 'string', format: 'email' },
+    password: { type: 'string', minLength: 8, maxLength: 128 },
+    organizationName: { type: 'string', minLength: 2, maxLength: 100, nullable: true },
+    organizationId: { type: 'string', minLength: 1, nullable: true }
+  },
+  required: ['displayName', 'email', 'password'],
+  additionalProperties: false
+};
+
 export interface RefreshInput {
   refreshToken: string;
 }

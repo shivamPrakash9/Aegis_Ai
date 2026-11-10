@@ -9,7 +9,7 @@ if (!process.env.PRIVACY_DATABASE_URL) {
 }
 
 const env = {
-  port: parseInt(process.env.PORT || '3002', 10),
+  port: parseInt(process.env.PRIVACY_PORT || '3002', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
   isTest: process.env.NODE_ENV === 'test',

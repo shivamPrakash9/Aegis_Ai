@@ -20,14 +20,12 @@ foreach ($container in $requiredContainers) {
     }
 }
 
-# 2. Build Identity Service
-Write-Host "`n[2/3] Checking Identity service build..." -ForegroundColor Yellow
-if (-not (Test-Path "Identity\dist\server.js")) {
-    Write-Host "  Compiling Identity TypeScript..." -ForegroundColor Cyan
-    npm --prefix Identity run build
-} else {
-    Write-Host "  ✓ Identity dist/ is ready." -ForegroundColor Green
-}
+# 2. Build Identity Service & Seed Test Accounts
+Write-Host "`n[2/3] Checking Identity service build and dev seed accounts..." -ForegroundColor Yellow
+Write-Host "  Compiling Identity TypeScript..." -ForegroundColor Cyan
+npm --prefix Identity run build
+Write-Host "  Seeding development test accounts (idempotent upsert)..." -ForegroundColor Cyan
+npm run seed:dev
 
 # 3. Start All Services & Frontend
 Write-Host "`n[3/3] Launching all 6 Microservices and Frontend Console..." -ForegroundColor Yellow

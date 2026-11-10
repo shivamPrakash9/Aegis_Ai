@@ -13,7 +13,7 @@
     "start:model": "npm --prefix ModelProvider run start",
     "start:audit": "npm --prefix SecurityAudit run start",
     "start:frontend": "npm --prefix frontend run dev",
-    "seed:dev": "npx tsx Identity/src/scripts/seedDev.ts",
+    "seed:dev": "npx tsx Identity/src/scripts/seedDev.ts && node ModelProvider/src/scripts/seedModels.js",
     "test:identity": "npm --prefix Identity test",
     "test:gateway": "npm --prefix AIGateway test",
     "test:privacy": "npm --prefix PrivacyScanner test",

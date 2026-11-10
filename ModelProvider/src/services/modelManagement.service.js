@@ -123,7 +123,7 @@ class ModelManagementService {
     if (!data.name || typeof data.name !== 'string') {
       throw new BadRequestError("Field 'name' is required.");
     }
-    const validTypes = ['openai', 'anthropic', 'mock', 'custom'];
+    const validTypes = ['openai', 'anthropic', 'gemini', 'mock', 'custom'];
     if (!data.type || !validTypes.includes(data.type)) {
       throw new BadRequestError(`Field 'type' must be one of: ${validTypes.join(', ')}.`);
     }
@@ -193,6 +193,8 @@ class ModelManagementService {
         ? 'https://api.openai.com/v1'
         : provider.type === 'anthropic' || provider.id === 'anthropic'
         ? 'https://api.anthropic.com/v1'
+        : provider.type === 'gemini' || provider.id === 'gemini'
+        ? 'https://generativelanguage.googleapis.com/v1beta'
         : null);
 
     if (!effectiveBaseUrl) {
@@ -214,6 +216,8 @@ class ModelManagementService {
         if (provider.type === 'anthropic' || provider.id === 'anthropic') {
           headers['x-api-key'] = provider.apiKey;
           headers['anthropic-version'] = '2023-06-01';
+        } else if (provider.type === 'gemini' || provider.id === 'gemini') {
+          headers['x-goog-api-key'] = provider.apiKey;
         } else {
           headers['Authorization'] = `Bearer ${provider.apiKey}`;
         }

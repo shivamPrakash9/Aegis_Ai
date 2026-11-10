@@ -5,14 +5,16 @@ import {
   getMe,
   login,
   logout,
-  refresh
+  refresh,
+  register
 } from '../controllers/auth.controller';
 import { authenticateToken } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import {
   loginSchema,
   logoutSchema,
-  refreshSchema
+  refreshSchema,
+  registerSchema
 } from '../schemas';
 
 const router = Router();
@@ -21,6 +23,12 @@ router.post(
   '/login',
   validate(loginSchema, 'body'),
   login
+);
+
+router.post(
+  '/register',
+  validate(registerSchema, 'body'),
+  register
 );
 
 router.post(

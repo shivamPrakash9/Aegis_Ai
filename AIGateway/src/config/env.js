@@ -12,7 +12,7 @@ if (!process.env.REDIS_URL) {
 }
 
 const env = {
-  port: parseInt(process.env.PORT || '3001', 10),
+  port: parseInt(process.env.GATEWAY_PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
   isTest: process.env.NODE_ENV === 'test',

@@ -1,7 +1,11 @@
 // Authentication Service: Login, Token Rotation, Replay Detection, and Profile Retrieval
 
+import { PrismaClient } from '@prisma/client';
+import { prisma as defaultPrisma } from '../config/database';
 import {
+  ConflictError,
   ForbiddenError,
+  NotFoundError,
   UnauthorizedError
 } from '../middleware/errorHandler';
 import {
@@ -16,7 +20,7 @@ import {
   UserRepository,
   userRepository as defaultUserRepo
 } from '../repositories/user.repository';
-import { LoginInput, LogoutInput, RefreshInput } from '../schemas';
+import { LoginInput, LogoutInput, RefreshInput, RegisterInput } from '../schemas';
 import {
   AuthenticatedPrincipal,
   SafeUser,
@@ -37,7 +41,8 @@ export class AuthService {
   constructor(
     private readonly userRepo: UserRepository = defaultUserRepo,
     private readonly orgRepo: OrganizationRepository = defaultOrgRepo,
-    private readonly refreshRepo: RefreshTokenRepository = defaultRefreshRepo
+    private readonly refreshRepo: RefreshTokenRepository = defaultRefreshRepo,
+    private readonly prisma: PrismaClient = defaultPrisma
   ) {}
 
   async login(
@@ -108,6 +113,126 @@ export class AuthService {
         accessToken,
         refreshToken,
         expiresIn: 900, // 15 minutes in seconds
+        tokenType: 'Bearer'
+      }
+    };
+  }
+
+  async register(
+    input: RegisterInput
+  ): Promise<{ user: SafeUser; tokens: TokenPair; success?: boolean }> {
+    const normalizedEmail = input.email.trim().toLowerCase();
+    const existing = await this.userRepo.findByEmail(normalizedEmail);
+    if (existing) {
+      throw new ConflictError(`User with email '${normalizedEmail}' already exists.`);
+    }
+
+    let organizationId = input.organizationId;
+    let assignedRole: 'ORGANIZATION_ADMIN' | 'DEVELOPER' = 'DEVELOPER';
+
+    if (organizationId) {
+      const org = await this.orgRepo.findById(organizationId);
+      if (!org || org.status !== 'ACTIVE') {
+        throw new NotFoundError('Organization not found or inactive.');
+      }
+    } else if (input.organizationName && input.organizationName.trim()) {
+      const orgName = input.organizationName.trim();
+      const slug = orgName
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 50);
+
+      let existingOrg = await this.orgRepo.findBySlug(slug);
+      if (!existingOrg) {
+        existingOrg = await this.prisma.organization.findFirst({
+          where: {
+            OR: [
+              { name: { equals: orgName, mode: 'insensitive' } },
+              { slug: { equals: slug, mode: 'insensitive' } }
+            ]
+          }
+        });
+      }
+
+      if (existingOrg) {
+        if (existingOrg.status !== 'ACTIVE') {
+          throw new UnauthorizedError('Organization is inactive.');
+        }
+        organizationId = existingOrg.id;
+        assignedRole = 'DEVELOPER';
+      } else {
+        const createdOrg = await this.orgRepo.create({
+          name: orgName,
+          slug: slug || `org-${Date.now()}`
+        });
+        organizationId = createdOrg.id;
+        assignedRole = 'ORGANIZATION_ADMIN';
+      }
+    } else {
+      // Default to primary enterprise organization
+      let defaultOrg = await this.orgRepo.findBySlug('org_enterprise_alpha');
+      if (!defaultOrg) {
+        defaultOrg = await this.orgRepo.create({
+          name: 'Enterprise Alpha Corp',
+          slug: 'org_enterprise_alpha'
+        });
+      }
+      organizationId = defaultOrg.id;
+      assignedRole = 'DEVELOPER';
+    }
+
+    const passwordHash = await hashPassword(input.password);
+    const user = await this.userRepo.create({
+      organizationId,
+      email: normalizedEmail,
+      passwordHash,
+      displayName: input.displayName.trim(),
+      role: assignedRole
+    });
+
+    const permissions = getPermissionsForRole(user.role as any);
+    const principal: AuthenticatedPrincipal = {
+      id: user.id,
+      organizationId: user.organizationId,
+      type: 'USER',
+      email: user.email,
+      displayName: user.displayName,
+      role: user.role as any,
+      permissions
+    };
+
+    const accessToken = signAccessToken(principal);
+    const { refreshToken, tokenHash, familyId, expiresAt } =
+      createRefreshToken(user.id, user.organizationId);
+
+    await this.refreshRepo.create({
+      userId: user.id,
+      organizationId: user.organizationId,
+      tokenHash,
+      familyId,
+      expiresAt
+    });
+
+    const safeUser: SafeUser = {
+      id: user.id,
+      organizationId: user.organizationId,
+      email: user.email,
+      displayName: user.displayName,
+      role: user.role as any,
+      status: user.status as any,
+      lastLoginAt: user.lastLoginAt,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+
+    return {
+      success: true,
+      user: safeUser,
+      tokens: {
+        accessToken,
+        refreshToken,
+        expiresIn: 900,
         tokenType: 'Bearer'
       }
     };

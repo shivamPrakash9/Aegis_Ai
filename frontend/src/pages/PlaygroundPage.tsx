@@ -39,7 +39,7 @@ export const PlaygroundPage: React.FC = () => {
     { role: 'user', content: '' }
   ]);
   const [systemPrompt, setSystemPrompt] = useState('');
-  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.5-flash-lite');
   const [capabilityPreference, setCapabilityPreference] = useState<'general' | 'code' | 'analysis'>('general');
   const [temperature, setTemperature] = useState<number>(0.7);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -82,15 +82,28 @@ export const PlaygroundPage: React.FC = () => {
   const { data: models = [], isLoading: isLoadingModels } = useQuery({
     queryKey: ['available-models'],
     queryFn: () => modelApi.listModels(true),
-    staleTime: 60000,
+    staleTime: 5000,
   });
+
+  // Sort models so that Gemini models and default models appear at the top
+  const sortedModels = React.useMemo(() => {
+    return [...models].sort((a, b) => {
+      if (a.modelId === 'gemini-3.5-flash-lite') return -1;
+      if (b.modelId === 'gemini-3.5-flash-lite') return 1;
+      if (a.isDefault && !b.isDefault) return -1;
+      if (!a.isDefault && b.isDefault) return 1;
+      if (a.provider === 'gemini' && b.provider !== 'gemini') return -1;
+      if (a.provider !== 'gemini' && b.provider === 'gemini') return 1;
+      return a.modelId.localeCompare(b.modelId);
+    });
+  }, [models]);
 
   // Update selected model when models list loads
   useEffect(() => {
-    if (models.length > 0 && !models.some(m => m.modelId === selectedModel)) {
-      setSelectedModel(models[0].modelId);
+    if (sortedModels.length > 0 && (!selectedModel || !sortedModels.some(m => m.modelId === selectedModel))) {
+      setSelectedModel(sortedModels[0].modelId);
     }
-  }, [models, selectedModel]);
+  }, [sortedModels, selectedModel]);
 
   // Clean up polling on unmount
   useEffect(() => {
@@ -322,13 +335,13 @@ export const PlaygroundPage: React.FC = () => {
                     onChange={(e) => setSelectedModel(e.target.value)}
                     disabled={isSubmitting || isPolling}
                   >
-                    {models.map((m) => (
+                    {sortedModels.map((m) => (
                       <option key={m.modelId} value={m.modelId}>
                         {m.modelId} ({m.provider})
                       </option>
                     ))}
-                    {models.length === 0 && (
-                      <option value="gpt-4o">gpt-4o (default)</option>
+                    {sortedModels.length === 0 && (
+                      <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (gemini)</option>
                     )}
                   </select>
                 </div>

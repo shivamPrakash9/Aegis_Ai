@@ -122,7 +122,7 @@ const registerProviderSchema = {
   properties: {
     id: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-zA-Z0-9-_]+$' },
     name: { type: 'string', minLength: 1, maxLength: 128 },
-    type: { type: 'string', enum: ['openai', 'anthropic', 'mock', 'custom'] },
+    type: { type: 'string', enum: ['openai', 'anthropic', 'gemini', 'mock', 'custom'] },
     baseUrl: { type: 'string', maxLength: 512 },
     apiKey: { type: 'string', maxLength: 512 },
     enabled: { type: 'boolean' }

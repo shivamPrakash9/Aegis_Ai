@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const env = {
-  port: parseInt(process.env.PORT || '3005', 10),
+  port: parseInt(process.env.AUDIT_PORT || '3005', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
   isTest: process.env.NODE_ENV === 'test',

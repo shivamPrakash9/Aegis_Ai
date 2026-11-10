@@ -83,7 +83,7 @@ export const modelApi = {
   registerProvider: async (provider: {
     id: string;
     name: string;
-    type: 'openai' | 'anthropic' | 'mock' | 'custom';
+    type: 'openai' | 'anthropic' | 'gemini' | 'mock' | 'custom';
     baseUrl?: string;
     apiKey?: string;
     enabled?: boolean;

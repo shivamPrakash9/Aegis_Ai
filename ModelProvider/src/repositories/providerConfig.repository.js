@@ -7,6 +7,16 @@ const { encryptSecret, decryptSecret } = require('../utils/crypto');
 
 const DEFAULT_PROVIDERS = [
   {
+    id: 'gemini',
+    name: 'Google Gemini',
+    type: 'gemini',
+    baseUrl: env.geminiBaseUrl || 'https://generativelanguage.googleapis.com',
+    apiKey: env.geminiApiKey || null,
+    enabled: true,
+    isHealthy: Boolean(env.geminiApiKey),
+    isBuiltin: true
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     type: 'openai',

@@ -8,11 +8,32 @@ export interface LoginResponse {
   tokens: TokenPair;
 }
 
+export interface RegisterRequest {
+  displayName: string;
+  email: string;
+  password: string;
+  organizationName?: string;
+  organizationId?: string;
+}
+
 export const authApi = {
   login: async (credentials: { email: string; password: string }): Promise<LoginResponse> => {
     const res = await request<LoginResponse>(API_CONFIG.identity, '/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
+      skipAuth: true
+    });
+
+    if (res.tokens?.accessToken) {
+      tokenStore.setTokens(res.tokens.accessToken, res.tokens.refreshToken);
+    }
+    return res;
+  },
+
+  register: async (data: RegisterRequest): Promise<LoginResponse> => {
+    const res = await request<LoginResponse>(API_CONFIG.identity, '/v1/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
       skipAuth: true
     });
 

@@ -7,6 +7,7 @@ describe('Outbound HTTP Security & SSRF Prevention', () => {
   test('allows requests to allowlisted provider hosts', () => {
     expect(() => validateProviderUrl('https://api.openai.com/v1/chat/completions')).not.toThrow();
     expect(() => validateProviderUrl('https://api.anthropic.com/v1/messages')).not.toThrow();
+    expect(() => validateProviderUrl('https://generativelanguage.googleapis.com/v1beta/models')).not.toThrow();
     expect(() => validateProviderUrl('http://127.0.0.1:8080/v1')).not.toThrow();
     expect(() => validateProviderUrl('http://localhost:3000/v1')).not.toThrow();
   });

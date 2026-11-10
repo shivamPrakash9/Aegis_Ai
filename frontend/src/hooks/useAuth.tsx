@@ -8,6 +8,13 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (credentials: { email: string; password: string }) => Promise<void>;
+  register?: (data: {
+    displayName: string;
+    email: string;
+    password: string;
+    organizationName?: string;
+    organizationId?: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
   isAdmin: boolean;
@@ -63,6 +70,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const register = async (data: {
+    displayName: string;
+    email: string;
+    password: string;
+    organizationName?: string;
+    organizationId?: string;
+  }) => {
+    setIsLoading(true);
+    try {
+      await authApi.register(data);
+      const principal = await authApi.getCurrentUser();
+      setUser(principal);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
       await authApi.logout();
@@ -87,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        register,
         logout,
         hasPermission,
         isAdmin,

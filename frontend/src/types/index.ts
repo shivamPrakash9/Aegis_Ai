@@ -267,7 +267,7 @@ export interface ApprovalRequest {
 export interface ProviderConfig {
   id: string;
   name: string;
-  type: 'openai' | 'anthropic' | 'mock' | 'custom';
+  type: 'openai' | 'anthropic' | 'gemini' | 'mock' | 'custom';
   baseUrl?: string | null;
   apiKeyConfigured: boolean;
   apiKeyMasked?: string | null;

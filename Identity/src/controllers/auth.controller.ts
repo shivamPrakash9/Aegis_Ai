@@ -16,6 +16,19 @@ export async function login(
   }
 }
 
+export async function register(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const result = await authService.register(req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function refresh(
   req: Request,
   res: Response,
