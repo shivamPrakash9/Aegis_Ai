@@ -107,6 +107,14 @@ class MockProvider extends BaseProvider {
       }
     };
   }
+
+  async testConnection() {
+    return {
+      healthy: true,
+      latencyMs: 1,
+      message: 'Mock provider local loopback verified successfully.'
+    };
+  }
 }
 
 module.exports = {

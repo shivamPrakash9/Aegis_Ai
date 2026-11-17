@@ -122,7 +122,7 @@ class OpenAiCompatibleProvider extends BaseProvider {
       );
     } catch (err) {
       if (err instanceof GatewayTimeoutError) throw err;
-      throw new BadGatewayError(`Failed to reach OpenAI provider: ${err.message}`);
+      throw new BadGatewayError(`Failed to reach ${this.name}: ${err.message}`);
     }
 
     if (!response.ok) {
@@ -134,24 +134,24 @@ class OpenAiCompatibleProvider extends BaseProvider {
       }
 
       const errorMessage =
-        errBody?.error?.message || `OpenAI provider returned HTTP status ${response.status}`;
+        errBody?.error?.message || `${this.name} returned HTTP status ${response.status}`;
 
       logger.error(
         { correlationId, status: response.status, provider: this.id },
-        'OpenAI provider returned error response'
+        `${this.name} returned error response: ${errorMessage}`
       );
 
       if (response.status === 429) {
-        throw new RateLimitError(`OpenAI provider rate limit exceeded: ${errorMessage}`);
+        throw new RateLimitError(`${this.name} rate limit exceeded: ${errorMessage}`);
       }
       if (response.status === 504 || response.status === 408) {
-        throw new GatewayTimeoutError(`OpenAI provider gateway timeout: ${errorMessage}`);
+        throw new GatewayTimeoutError(`${this.name} gateway timeout: ${errorMessage}`);
       }
       if (response.status >= 500) {
-        throw new BadGatewayError(`OpenAI provider service error: ${errorMessage}`);
+        throw new BadGatewayError(`${this.name} service error: ${errorMessage}`);
       }
 
-      throw new BadGatewayError(`OpenAI provider request rejected (${response.status}): ${errorMessage}`);
+      throw new BadGatewayError(`${this.name} request rejected (${response.status}): ${errorMessage}`);
     }
 
     let data;
@@ -162,6 +162,57 @@ class OpenAiCompatibleProvider extends BaseProvider {
     }
 
     return this.normalizeResponse(data, model);
+  }
+
+  async testConnection() {
+    if (!this.isConfigured()) {
+      return {
+        healthy: false,
+        latencyMs: 0,
+        message: `${this.name} API key is not configured.`
+      };
+    }
+
+    const startTime = Date.now();
+    try {
+      const pingUrl = `${this.baseUrl}/models`;
+      const res = await safeFetch(
+        pingUrl,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          timeoutMs: 8000
+        },
+        'conn_test_openai'
+      );
+
+      const latencyMs = Date.now() - startTime;
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const count = Array.isArray(data.data) ? data.data.length : 0;
+        return {
+          healthy: true,
+          latencyMs,
+          message: `${this.name} connected successfully (${count} models available). Verified in ${latencyMs}ms.`
+        };
+      }
+
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.error?.message || res.statusText || 'Authentication failed';
+      return {
+        healthy: false,
+        latencyMs,
+        message: `${this.name} check failed (HTTP ${res.status}): ${msg}`
+      };
+    } catch (err) {
+      return {
+        healthy: false,
+        latencyMs: Date.now() - startTime,
+        message: `Connection to ${this.name} failed: ${err.message}`
+      };
+    }
   }
 }
 

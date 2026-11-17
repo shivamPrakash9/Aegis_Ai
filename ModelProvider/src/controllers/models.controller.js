@@ -9,6 +9,8 @@ class ModelsController {
     this.listModels = this.listModels.bind(this);
     this.getModel = this.getModel.bind(this);
     this.registerModel = this.registerModel.bind(this);
+    this.updateModel = this.updateModel.bind(this);
+    this.deleteModel = this.deleteModel.bind(this);
     this.enableModel = this.enableModel.bind(this);
     this.disableModel = this.disableModel.bind(this);
     this.getUsage = this.getUsage.bind(this);
@@ -49,6 +51,26 @@ class ModelsController {
     try {
       const registered = await this.service.registerModel(req.body);
       res.status(201).json(registered);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateModel(req, res, next) {
+    try {
+      const modelId = req.params.id;
+      const updated = await this.service.updateModel(modelId, req.body);
+      res.status(200).json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async deleteModel(req, res, next) {
+    try {
+      const modelId = req.params.id;
+      const result = await this.service.deleteModel(modelId);
+      res.status(200).json(result);
     } catch (err) {
       next(err);
     }

@@ -64,6 +64,35 @@ export const modelApi = {
     });
   },
 
+  updateModel: async (
+    id: string,
+    model: {
+      provider?: string;
+      providerModelName?: string;
+      contextWindow?: number;
+      maxTokens?: number;
+      capabilities?: string[];
+      description?: string;
+      enabled?: boolean;
+      isDefault?: boolean;
+    }
+  ): Promise<ModelConfig> => {
+    return request<ModelConfig>(API_CONFIG.model, `/v1/models/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(model)
+    });
+  },
+
+  deleteModel: async (id: string): Promise<{ success: boolean; modelId: string }> => {
+    return request<{ success: boolean; modelId: string }>(
+      API_CONFIG.model,
+      `/v1/models/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE'
+      }
+    );
+  },
+
   // --- Providers API ---
 
   listProviders: async (enabledOnly = false): Promise<ProviderConfig[]> => {
@@ -83,15 +112,45 @@ export const modelApi = {
   registerProvider: async (provider: {
     id: string;
     name: string;
-    type: 'openai' | 'anthropic' | 'mock' | 'custom';
+    type: 'openai' | 'anthropic' | 'gemini' | 'mock' | 'custom';
     baseUrl?: string;
     apiKey?: string;
+    description?: string;
+    organizationId?: string;
     enabled?: boolean;
   }): Promise<ProviderConfig> => {
     return request<ProviderConfig>(API_CONFIG.model, '/v1/providers', {
       method: 'POST',
       body: JSON.stringify(provider)
     });
+  },
+
+  updateProvider: async (
+    id: string,
+    provider: {
+      name?: string;
+      type?: 'openai' | 'anthropic' | 'gemini' | 'mock' | 'custom';
+      baseUrl?: string;
+      apiKey?: string;
+      description?: string;
+      organizationId?: string;
+      enabled?: boolean;
+    }
+  ): Promise<ProviderConfig> => {
+    return request<ProviderConfig>(API_CONFIG.model, `/v1/providers/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(provider)
+    });
+  },
+
+  deleteProvider: async (id: string): Promise<{ success: boolean; id: string }> => {
+    return request<{ success: boolean; id: string }>(
+      API_CONFIG.model,
+      `/v1/providers/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE'
+      }
+    );
   },
 
   enableProvider: async (id: string): Promise<ProviderConfig> => {

@@ -267,12 +267,16 @@ export interface ApprovalRequest {
 export interface ProviderConfig {
   id: string;
   name: string;
-  type: 'openai' | 'anthropic' | 'mock' | 'custom';
+  type: 'openai' | 'anthropic' | 'gemini' | 'mock' | 'custom';
   baseUrl?: string | null;
+  description?: string | null;
+  organizationId?: string | null;
   apiKeyConfigured: boolean;
   apiKeyMasked?: string | null;
   enabled: boolean;
   isHealthy: boolean;
+  lastConnectedAt?: string | null;
+  lastError?: string | null;
   isBuiltin?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -283,6 +287,7 @@ export interface ProviderTestResult {
   latencyMs: number;
   message: string;
   providerId?: string;
+  timestamp?: string;
 }
 
 export interface ModelConfig {

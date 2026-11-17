@@ -3,14 +3,37 @@
 const { mockProvider } = require('../providers/mock.provider');
 const { openAiCompatibleProvider } = require('../providers/openaiCompatible.provider');
 const { anthropicProvider } = require('../providers/anthropic.provider');
+const { geminiProvider, GeminiProvider } = require('../providers/gemini.provider');
 const { ModelNotFoundError, ForbiddenError, ServiceUnavailableError } = require('../utils/errors');
 const { env } = require('../config/env');
+
+function getDefaultProviderForModel() {
+  if (env.isTest) return 'openai';
+  if (env.defaultProvider === 'mock') return 'mock';
+  if (env.openaiApiKey) return 'openai';
+  if (env.groqApiKey) return 'groq';
+  return 'mock';
+}
+
+function getDefaultModelNameForGpt4o() {
+  const p = getDefaultProviderForModel();
+  if (p === 'mock') return 'mock-gpt-4o';
+  if (p === 'groq') return 'openai/gpt-oss-120b';
+  return 'gpt-4o-2024-08-06';
+}
+
+function getDefaultModelNameForGpt4oMini() {
+  const p = getDefaultProviderForModel();
+  if (p === 'mock') return 'mock-gpt-4o';
+  if (p === 'groq') return 'openai/gpt-oss-20b';
+  return 'gpt-4o-mini-2024-07-18';
+}
 
 const DEFAULT_CATALOG = [
   {
     modelId: 'gpt-4o',
-    provider: env.isTest ? 'openai' : (env.openaiApiKey ? 'openai' : (env.groqApiKey ? 'groq' : 'openai')),
-    providerModelName: env.openaiApiKey ? 'gpt-4o-2024-08-06' : (env.groqApiKey ? 'openai/gpt-oss-120b' : 'gpt-4o-2024-08-06'),
+    provider: getDefaultProviderForModel(),
+    providerModelName: getDefaultModelNameForGpt4o(),
     enabled: true,
     isDefault: true,
     maxTokens: 4096,
@@ -21,8 +44,8 @@ const DEFAULT_CATALOG = [
   },
   {
     modelId: 'gpt-4o-mini',
-    provider: env.isTest ? 'openai' : (env.openaiApiKey ? 'openai' : (env.groqApiKey ? 'groq' : 'openai')),
-    providerModelName: env.openaiApiKey ? 'gpt-4o-mini-2024-07-18' : (env.groqApiKey ? 'openai/gpt-oss-20b' : 'gpt-4o-mini-2024-07-18'),
+    provider: getDefaultProviderForModel(),
+    providerModelName: getDefaultModelNameForGpt4oMini(),
     enabled: true,
     isDefault: false,
     maxTokens: 4096,
@@ -33,15 +56,15 @@ const DEFAULT_CATALOG = [
   },
   {
     modelId: 'gpt-oss-120b',
-    provider: 'groq',
-    providerModelName: 'openai/gpt-oss-120b',
+    provider: getDefaultProviderForModel(),
+    providerModelName: getDefaultProviderForModel() === 'mock' ? 'mock-gpt-4o' : 'openai/gpt-oss-120b',
     enabled: true,
     isDefault: false,
     maxTokens: 4096,
     contextWindow: 128000,
     defaultTemperature: 0.7,
     capabilities: ['chat', 'reasoning'],
-    description: 'OpenAI 120B reasoning model hosted on Groq'
+    description: 'Reasoning model hosted on Groq / Mock'
   },
   {
     modelId: 'gpt-oss-20b',
@@ -116,6 +139,42 @@ const DEFAULT_CATALOG = [
     description: 'Deterministic test mock for Claude 3.5'
   },
   {
+    modelId: 'gemini-1.5-flash',
+    provider: 'gemini',
+    providerModelName: 'gemini-1.5-flash',
+    enabled: true,
+    isDefault: false,
+    maxTokens: 8192,
+    contextWindow: 1000000,
+    defaultTemperature: 0.7,
+    capabilities: ['chat', 'reasoning', 'multimodal'],
+    description: 'Google Gemini 1.5 Flash fast multimodal model'
+  },
+  {
+    modelId: 'gemini-1.5-pro',
+    provider: 'gemini',
+    providerModelName: 'gemini-1.5-pro',
+    enabled: true,
+    isDefault: false,
+    maxTokens: 8192,
+    contextWindow: 2000000,
+    defaultTemperature: 0.7,
+    capabilities: ['chat', 'reasoning', 'coding', 'analysis'],
+    description: 'Google Gemini 1.5 Pro advanced frontier reasoning model'
+  },
+  {
+    modelId: 'gemini-2.0-flash',
+    provider: 'gemini',
+    providerModelName: 'gemini-2.0-flash',
+    enabled: true,
+    isDefault: false,
+    maxTokens: 8192,
+    contextWindow: 1000000,
+    defaultTemperature: 0.7,
+    capabilities: ['chat', 'reasoning', 'coding'],
+    description: 'Google Gemini 2.0 Flash next-gen high-speed model'
+  },
+  {
     modelId: 'test-model',
     provider: 'mock',
     providerModelName: 'test-model',
@@ -138,6 +197,7 @@ class ProviderRegistryService {
     this.registerProvider(mockProvider);
     this.registerProvider(openAiCompatibleProvider);
     this.registerProvider(anthropicProvider);
+    this.registerProvider(geminiProvider);
 
     if (env.groqApiKey) {
       this.registerProvider(
@@ -163,7 +223,14 @@ class ProviderRegistryService {
     let adapter;
     const providerType = String(type).toLowerCase().trim();
 
-    if (providerType === 'anthropic') {
+    if (providerType === 'gemini' || providerType === 'google') {
+      adapter = new GeminiProvider({
+        id: key,
+        name: name || key,
+        apiKey: apiKey || '',
+        baseUrl: baseUrl || 'https://generativelanguage.googleapis.com/v1beta'
+      });
+    } else if (providerType === 'anthropic') {
       adapter = new anthropicProvider.constructor({
         id: key,
         name: name || key,

@@ -41,6 +41,10 @@ class BaseProvider {
   normalizeResponse(raw, requestedModel) {
     throw new Error('normalizeResponse() must be implemented by provider subclass');
   }
+
+  async testConnection() {
+    throw new Error('testConnection() must be implemented by provider subclass');
+  }
 }
 
 module.exports = { BaseProvider };

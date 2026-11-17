@@ -8,6 +8,8 @@ class ProvidersController {
     this.listProviders = this.listProviders.bind(this);
     this.getProvider = this.getProvider.bind(this);
     this.registerProvider = this.registerProvider.bind(this);
+    this.updateProvider = this.updateProvider.bind(this);
+    this.deleteProvider = this.deleteProvider.bind(this);
     this.enableProvider = this.enableProvider.bind(this);
     this.disableProvider = this.disableProvider.bind(this);
     this.testProvider = this.testProvider.bind(this);
@@ -40,6 +42,26 @@ class ProvidersController {
     try {
       const registered = await this.service.registerProvider(req.body);
       res.status(201).json(registered);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateProvider(req, res, next) {
+    try {
+      const providerId = req.params.id;
+      const updated = await this.service.updateProvider(providerId, req.body);
+      res.status(200).json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async deleteProvider(req, res, next) {
+    try {
+      const providerId = req.params.id;
+      const result = await this.service.deleteProvider(providerId);
+      res.status(200).json(result);
     } catch (err) {
       next(err);
     }

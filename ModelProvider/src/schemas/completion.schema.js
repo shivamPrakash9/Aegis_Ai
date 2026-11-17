@@ -122,17 +122,54 @@ const registerProviderSchema = {
   properties: {
     id: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-zA-Z0-9-_]+$' },
     name: { type: 'string', minLength: 1, maxLength: 128 },
-    type: { type: 'string', enum: ['openai', 'anthropic', 'mock', 'custom'] },
+    type: { type: 'string', enum: ['openai', 'anthropic', 'gemini', 'google', 'mock', 'custom'] },
     baseUrl: { type: 'string', maxLength: 512 },
     apiKey: { type: 'string', maxLength: 512 },
+    description: { type: 'string', maxLength: 1000 },
+    organizationId: { type: 'string', maxLength: 128 },
     enabled: { type: 'boolean' }
   },
-  additionalProperties: false
+  additionalProperties: true
+};
+
+const updateProviderSchema = {
+  type: 'object',
+  properties: {
+    name: { type: 'string', minLength: 1, maxLength: 128 },
+    type: { type: 'string', enum: ['openai', 'anthropic', 'gemini', 'google', 'mock', 'custom'] },
+    baseUrl: { type: 'string', maxLength: 512 },
+    apiKey: { type: 'string', maxLength: 512 },
+    description: { type: 'string', maxLength: 1000 },
+    organizationId: { type: 'string', maxLength: 128 },
+    enabled: { type: 'boolean' }
+  },
+  additionalProperties: true
+};
+
+const updateModelSchema = {
+  type: 'object',
+  properties: {
+    provider: { type: 'string', minLength: 1, maxLength: 64 },
+    providerModelName: { type: 'string', maxLength: 128 },
+    enabled: { type: 'boolean' },
+    isDefault: { type: 'boolean' },
+    maxTokens: { type: 'integer', minimum: 1, maximum: 128000 },
+    contextWindow: { type: 'integer', minimum: 1000 },
+    defaultTemperature: { type: 'number', minimum: 0, maximum: 2 },
+    capabilities: {
+      type: 'array',
+      items: { type: 'string' }
+    },
+    description: { type: 'string', maxLength: 500 }
+  },
+  additionalProperties: true
 };
 
 module.exports = {
   createCompletionSchema,
   registerModelSchema,
+  updateModelSchema,
   registerProviderSchema,
+  updateProviderSchema,
   usageQuerySchema
 };

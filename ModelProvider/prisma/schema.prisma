@@ -50,15 +50,20 @@ model CompletionUsage {
 }
 
 model ProviderConfig {
-  id          String   @id
-  name        String
-  type        String   @default("openai") // openai, anthropic, mock, custom
-  baseUrl     String?
-  apiKey      String?
-  enabled     Boolean  @default(true)
-  isHealthy   Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id
+  name            String
+  type            String    @default("openai") // openai, anthropic, mock, custom, gemini
+  baseUrl         String?
+  apiKey          String?
+  description     String?
+  organizationId  String?
+  enabled         Boolean   @default(true)
+  isHealthy       Boolean   @default(true)
+  lastConnectedAt DateTime?
+  lastError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([enabled])
+  @@index([organizationId])
 }

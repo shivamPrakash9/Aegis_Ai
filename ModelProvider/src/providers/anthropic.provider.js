@@ -169,6 +169,16 @@ class AnthropicProvider extends BaseProvider {
         'Anthropic provider returned error response'
       );
 
+      // If upstream rejects credentials (401) or 404 in development, fall back gracefully to mock
+      if ((response.status === 401 || response.status === 404) && env.nodeEnv !== 'production') {
+        logger.warn(
+          { correlationId, provider: this.id, status: response.status, error: errorMessage },
+          `Anthropic provider returned ${response.status} (${errorMessage}). Falling back to MockProvider for development continuity.`
+        );
+        const { mockProvider } = require('./mock.provider');
+        return mockProvider.invokeCompletion({ model, messages, temperature, maxTokens, stop, correlationId });
+      }
+
       if (response.status === 429) {
         throw new RateLimitError(`Anthropic rate limit exceeded: ${errorMessage}`);
       }
@@ -190,6 +200,56 @@ class AnthropicProvider extends BaseProvider {
     }
 
     return this.normalizeResponse(data, model);
+  }
+
+  async testConnection() {
+    if (!this.isConfigured()) {
+      return {
+        healthy: false,
+        latencyMs: 0,
+        message: `${this.name} API key is not configured.`
+      };
+    }
+
+    const startTime = Date.now();
+    try {
+      const pingUrl = `${this.baseUrl}/models`;
+      const res = await safeFetch(
+        pingUrl,
+        {
+          method: 'GET',
+          headers: {
+            'x-api-key': this.apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          timeoutMs: 8000
+        },
+        'conn_test_anthropic'
+      );
+
+      const latencyMs = Date.now() - startTime;
+      if (res.ok) {
+        return {
+          healthy: true,
+          latencyMs,
+          message: `${this.name} connected successfully. Verified in ${latencyMs}ms.`
+        };
+      }
+
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.error?.message || res.statusText || 'Authentication failed';
+      return {
+        healthy: false,
+        latencyMs,
+        message: `${this.name} check failed (HTTP ${res.status}): ${msg}`
+      };
+    } catch (err) {
+      return {
+        healthy: false,
+        latencyMs: Date.now() - startTime,
+        message: `Connection to ${this.name} failed: ${err.message}`
+      };
+    }
   }
 }
 

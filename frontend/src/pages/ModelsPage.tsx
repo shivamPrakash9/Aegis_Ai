@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
-  Bot, 
   Cpu, 
   RefreshCw, 
   BarChart3, 
@@ -10,7 +9,15 @@ import {
   Plus,
   Server,
   Activity,
-  Key
+  Key,
+  Edit2,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  Search,
+  ExternalLink,
+  Shield,
+  Sparkles
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -26,7 +33,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { modelApi } from '@/services/model-api';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
-import { ModelConfig, ProviderConfig } from '@/types';
+import { ModelConfig, ProviderConfig, ProviderTestResult } from '@/types';
 
 export const ModelsPage: React.FC = () => {
   const { user } = useAuth();
@@ -35,35 +42,46 @@ export const ModelsPage: React.FC = () => {
 
   const canAdminister = ['ORGANIZATION_ADMIN', 'ADMIN', 'SUPER_ADMIN', 'MODEL_ADMIN'].includes(user?.role || '');
 
-  // Active tab state
-  const [activeTab, setActiveTab] = useState<'catalog' | 'providers' | 'telemetry'>('catalog');
+  // Tab & search states
+  const [activeTab, setActiveTab] = useState<'catalog' | 'providers' | 'telemetry'>('providers');
+  const [modelSearch, setModelSearch] = useState('');
+  const [providerSearch, setProviderSearch] = useState('');
 
-  // Confirmation toggles
+  // Confirmation toggles and deletion states
   const [confirmToggleModel, setConfirmToggleModel] = useState<ModelConfig | null>(null);
   const [confirmToggleProvider, setConfirmToggleProvider] = useState<ProviderConfig | null>(null);
+  const [confirmDeleteProvider, setConfirmDeleteProvider] = useState<ProviderConfig | null>(null);
+  const [confirmDeleteModel, setConfirmDeleteModel] = useState<ModelConfig | null>(null);
 
-  // Register model modal state
-  const [isRegisterModelOpen, setIsRegisterModelOpen] = useState(false);
-  const [newModelId, setNewModelId] = useState('');
-  const [newModelProvider, setNewModelProvider] = useState('openai');
-  const [newProviderModelName, setNewProviderModelName] = useState('');
-  const [newContextWindow, setNewContextWindow] = useState('128000');
-  const [newMaxTokens, setNewMaxTokens] = useState('4096');
-  const [newCapabilities, setNewCapabilities] = useState('general, code, analysis');
-  const [newModelDescription, setNewModelDescription] = useState('');
+  // Model modal state (Add / Edit)
+  const [isModelModalOpen, setIsModelModalOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<ModelConfig | null>(null);
+  const [mModelId, setMModelId] = useState('');
+  const [mProvider, setMProvider] = useState('groq');
+  const [mProviderModelName, setMProviderModelName] = useState('');
+  const [mContextWindow, setMContextWindow] = useState('128000');
+  const [mMaxTokens, setMMaxTokens] = useState('4096');
+  const [mCapabilities, setMCapabilities] = useState('chat, reasoning');
+  const [mDescription, setMDescription] = useState('');
+  const [mEnabled, setMEnabled] = useState(true);
+  const [mIsDefault, setMIsDefault] = useState(false);
 
-  // Register provider modal state
-  const [isRegisterProviderOpen, setIsRegisterProviderOpen] = useState(false);
-  const [newProviderId, setNewProviderId] = useState('');
-  const [newProviderName, setNewProviderName] = useState('');
-  const [newProviderType, setNewProviderType] = useState<'openai' | 'anthropic' | 'mock' | 'custom'>('openai');
-  const [newProviderBaseUrl, setNewProviderBaseUrl] = useState('');
-  const [newProviderApiKey, setNewProviderApiKey] = useState('');
+  // Provider modal state (Add / Edit)
+  const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<ProviderConfig | null>(null);
+  const [pId, setPId] = useState('');
+  const [pName, setPName] = useState('');
+  const [pType, setPType] = useState<'openai' | 'anthropic' | 'gemini' | 'mock' | 'custom'>('openai');
+  const [pBaseUrl, setPBaseUrl] = useState('');
+  const [pApiKey, setPApiKey] = useState('');
+  const [pDescription, setPDescription] = useState('');
+  const [pEnabled, setPEnabled] = useState(true);
 
-  // Provider testing state
+  // Live test results state map: providerId -> ProviderTestResult
+  const [testResults, setTestResults] = useState<Record<string, ProviderTestResult>>({});
   const [testingProviderId, setTestingProviderId] = useState<string | null>(null);
 
-  // Fetch models list
+  // Query models list
   const {
     data: models = [],
     isLoading: isLoadingModels,
@@ -75,7 +93,7 @@ export const ModelsPage: React.FC = () => {
     queryFn: () => modelApi.listModels(),
   });
 
-  // Fetch providers list
+  // Query providers list
   const {
     data: providers = [],
     isLoading: isLoadingProviders,
@@ -87,26 +105,78 @@ export const ModelsPage: React.FC = () => {
     queryFn: () => modelApi.listProviders(),
   });
 
-  // Fetch usage telemetry
+  // Query usage telemetry
   const { data: usageData, isLoading: isLoadingUsage } = useQuery({
     queryKey: ['models-usage'],
     queryFn: () => modelApi.getUsage({ limit: 15 }),
     staleTime: 30000,
   });
 
-  // Enable/Disable Model Mutation
+  // Open Add Provider modal
+  const handleOpenAddProvider = () => {
+    setEditingProvider(null);
+    setPId('');
+    setPName('');
+    setPType('openai');
+    setPBaseUrl('https://api.groq.com/openai/v1');
+    setPApiKey('');
+    setPDescription('');
+    setPEnabled(true);
+    setIsProviderModalOpen(true);
+  };
+
+  // Open Edit Provider modal
+  const handleOpenEditProvider = (p: ProviderConfig) => {
+    setEditingProvider(p);
+    setPId(p.id);
+    setPName(p.name);
+    setPType(p.type);
+    setPBaseUrl(p.baseUrl || '');
+    setPApiKey(''); // Leave blank to preserve existing key
+    setPDescription(p.description || '');
+    setPEnabled(p.enabled);
+    setIsProviderModalOpen(true);
+  };
+
+  // Open Add Model modal
+  const handleOpenAddModel = () => {
+    setEditingModel(null);
+    setMModelId('');
+    setMProvider(providers[0]?.id || 'groq');
+    setMProviderModelName('');
+    setMContextWindow('128000');
+    setMMaxTokens('4096');
+    setMCapabilities('chat, reasoning');
+    setMDescription('');
+    setMEnabled(true);
+    setMIsDefault(false);
+    setIsModelModalOpen(true);
+  };
+
+  // Open Edit Model modal
+  const handleOpenEditModel = (m: ModelConfig) => {
+    setEditingModel(m);
+    setMModelId(m.modelId);
+    setMProvider(m.provider);
+    setMProviderModelName(m.providerModelName || m.modelId);
+    setMContextWindow(String(m.contextWindow || 128000));
+    setMMaxTokens(String(m.maxTokens || 4096));
+    setMCapabilities(Array.isArray(m.capabilities) ? m.capabilities.join(', ') : 'chat');
+    setMDescription(m.description || '');
+    setMEnabled(m.enabled);
+    setMIsDefault(Boolean(m.isDefault));
+    setIsModelModalOpen(true);
+  };
+
+  // Toggle Model Enabled Mutation
   const toggleModelMutation = useMutation({
     mutationFn: async (model: ModelConfig) => {
-      if (model.enabled) {
-        return modelApi.disableModel(model.modelId);
-      } else {
-        return modelApi.enableModel(model.modelId);
-      }
+      return model.enabled ? modelApi.disableModel(model.modelId) : modelApi.enableModel(model.modelId);
     },
     onSuccess: (updated) => {
       toast({
         title: `Model ${updated.enabled ? 'Enabled' : 'Disabled'}`,
-        description: `Model ${updated.modelId} is now ${updated.enabled ? 'available' : 'unavailable'} for routing.`,
+        description: `Model ${updated.modelId} is now ${updated.enabled ? 'active' : 'disabled'}.`,
         variant: 'default',
       });
       queryClient.invalidateQueries({ queryKey: ['models-list'] });
@@ -114,23 +184,15 @@ export const ModelsPage: React.FC = () => {
       setConfirmToggleModel(null);
     },
     onError: (err: any) => {
-      toast({
-        title: 'Action Failed',
-        description: err.message || 'Could not toggle model state.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Action Failed', description: err.message, variant: 'destructive' });
       setConfirmToggleModel(null);
     },
   });
 
-  // Enable/Disable Provider Mutation
+  // Toggle Provider Enabled Mutation
   const toggleProviderMutation = useMutation({
     mutationFn: async (provider: ProviderConfig) => {
-      if (provider.enabled) {
-        return modelApi.disableProvider(provider.id);
-      } else {
-        return modelApi.enableProvider(provider.id);
-      }
+      return provider.enabled ? modelApi.disableProvider(provider.id) : modelApi.enableProvider(provider.id);
     },
     onSuccess: (updated) => {
       toast({
@@ -143,95 +205,167 @@ export const ModelsPage: React.FC = () => {
       setConfirmToggleProvider(null);
     },
     onError: (err: any) => {
-      toast({
-        title: 'Action Failed',
-        description: err.message || 'Could not toggle provider state.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Action Failed', description: err.message, variant: 'destructive' });
       setConfirmToggleProvider(null);
     },
   });
 
-  // Register Model Mutation
-  const registerModelMutation = useMutation({
+  // Save Provider Mutation (Add or Edit)
+  const saveProviderMutation = useMutation({
     mutationFn: async () => {
-      const caps = newCapabilities
+      if (editingProvider) {
+        return modelApi.updateProvider(editingProvider.id, {
+          name: pName.trim(),
+          type: pType,
+          baseUrl: pBaseUrl.trim() || undefined,
+          apiKey: pApiKey.trim() || undefined, // Blank preserves old key
+          description: pDescription.trim() || undefined,
+          enabled: pEnabled,
+          organizationId: user?.organizationId || 'org-alpha'
+        });
+      } else {
+        return modelApi.registerProvider({
+          id: pId.trim().toLowerCase(),
+          name: pName.trim(),
+          type: pType,
+          baseUrl: pBaseUrl.trim() || undefined,
+          apiKey: pApiKey.trim() || undefined,
+          description: pDescription.trim() || undefined,
+          organizationId: user?.organizationId || 'org-alpha',
+          enabled: pEnabled,
+        });
+      }
+    },
+    onSuccess: (saved) => {
+      toast({
+        title: editingProvider ? 'Provider Updated' : 'Provider Registered',
+        description: `Provider '${saved.name}' (${saved.id}) saved with secure encrypted credentials.`,
+        variant: 'success',
+      });
+      setIsProviderModalOpen(false);
+      setEditingProvider(null);
+      setPApiKey('');
+      queryClient.invalidateQueries({ queryKey: ['providers-list'] });
+      queryClient.invalidateQueries({ queryKey: ['models-list'] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: 'Save Failed',
+        description: err.message || 'Error persisting provider configuration.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Delete Provider Mutation
+  const deleteProviderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return modelApi.deleteProvider(id);
+    },
+    onSuccess: (_, id) => {
+      toast({
+        title: 'Provider Deleted',
+        description: `Provider '${id}' removed from configuration.`,
+        variant: 'success',
+      });
+      setConfirmDeleteProvider(null);
+      queryClient.invalidateQueries({ queryKey: ['providers-list'] });
+      queryClient.invalidateQueries({ queryKey: ['models-list'] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: 'Delete Failed',
+        description: err.message || 'Cannot delete provider.',
+        variant: 'destructive',
+      });
+      setConfirmDeleteProvider(null);
+    },
+  });
+
+  // Save Model Mutation (Add or Edit)
+  const saveModelMutation = useMutation({
+    mutationFn: async () => {
+      const caps = mCapabilities
         .split(',')
         .map((c) => c.trim())
         .filter(Boolean);
 
-      return modelApi.registerModel({
-        modelId: newModelId.trim(),
-        provider: newModelProvider.trim(),
-        providerModelName: newProviderModelName.trim() || newModelId.trim(),
-        contextWindow: parseInt(newContextWindow, 10) || 128000,
-        maxTokens: parseInt(newMaxTokens, 10) || 4096,
-        capabilities: caps.length > 0 ? caps : ['chat'],
-        description: newModelDescription.trim() || undefined,
-        enabled: true,
-      });
+      if (editingModel) {
+        return modelApi.updateModel(editingModel.modelId, {
+          provider: mProvider.trim(),
+          providerModelName: mProviderModelName.trim() || mModelId.trim(),
+          contextWindow: parseInt(mContextWindow, 10) || 128000,
+          maxTokens: parseInt(mMaxTokens, 10) || 4096,
+          capabilities: caps.length > 0 ? caps : ['chat'],
+          description: mDescription.trim() || undefined,
+          enabled: mEnabled,
+          isDefault: mIsDefault,
+        });
+      } else {
+        return modelApi.registerModel({
+          modelId: mModelId.trim(),
+          provider: mProvider.trim(),
+          providerModelName: mProviderModelName.trim() || mModelId.trim(),
+          contextWindow: parseInt(mContextWindow, 10) || 128000,
+          maxTokens: parseInt(mMaxTokens, 10) || 4096,
+          capabilities: caps.length > 0 ? caps : ['chat'],
+          description: mDescription.trim() || undefined,
+          enabled: mEnabled,
+          isDefault: mIsDefault,
+        });
+      }
     },
-    onSuccess: (registered) => {
+    onSuccess: (saved) => {
       toast({
-        title: 'Model Registered Successfully',
-        description: `Model ${registered.modelId} registered under provider ${registered.provider} and persisted.`,
+        title: editingModel ? 'Model Updated' : 'Model Registered',
+        description: `Model ${saved.modelId} under provider ${saved.provider} is saved.`,
         variant: 'success',
       });
-      setIsRegisterModelOpen(false);
-      setNewModelId('');
-      setNewProviderModelName('');
-      setNewModelDescription('');
+      setIsModelModalOpen(false);
+      setEditingModel(null);
       queryClient.invalidateQueries({ queryKey: ['models-list'] });
       queryClient.invalidateQueries({ queryKey: ['available-models'] });
     },
     onError: (err: any) => {
       toast({
-        title: 'Model Registration Failed',
-        description: err.message || 'Error registering new model.',
+        title: 'Model Operation Failed',
+        description: err.message || 'Error saving model.',
         variant: 'destructive',
       });
     },
   });
 
-  // Register Provider Mutation
-  const registerProviderMutation = useMutation({
-    mutationFn: async () => {
-      return modelApi.registerProvider({
-        id: newProviderId.trim().toLowerCase(),
-        name: newProviderName.trim(),
-        type: newProviderType,
-        baseUrl: newProviderBaseUrl.trim() || undefined,
-        apiKey: newProviderApiKey.trim() || undefined,
-        enabled: true,
-      });
+  // Delete Model Mutation
+  const deleteModelMutation = useMutation({
+    mutationFn: async (modelId: string) => {
+      return modelApi.deleteModel(modelId);
     },
-    onSuccess: (registered) => {
+    onSuccess: (_, modelId) => {
       toast({
-        title: 'Provider Registered Successfully',
-        description: `Provider '${registered.name}' (${registered.id}) has been persisted to the platform catalog.`,
+        title: 'Model Deleted',
+        description: `Model ${modelId} removed from catalog.`,
         variant: 'success',
       });
-      setIsRegisterProviderOpen(false);
-      setNewProviderId('');
-      setNewProviderName('');
-      setNewProviderBaseUrl('');
-      setNewProviderApiKey('');
-      queryClient.invalidateQueries({ queryKey: ['providers-list'] });
+      setConfirmDeleteModel(null);
+      queryClient.invalidateQueries({ queryKey: ['models-list'] });
+      queryClient.invalidateQueries({ queryKey: ['available-models'] });
     },
     onError: (err: any) => {
       toast({
-        title: 'Provider Registration Failed',
-        description: err.message || 'Error registering new provider configuration.',
+        title: 'Delete Failed',
+        description: err.message,
         variant: 'destructive',
       });
+      setConfirmDeleteModel(null);
     },
   });
 
-  // Test Provider Connection
+  // Real Provider Connection Test
   const handleTestProvider = async (providerId: string) => {
     setTestingProviderId(providerId);
     try {
       const res = await modelApi.testProvider(providerId);
+      setTestResults((prev) => ({ ...prev, [providerId]: res }));
       if (res.healthy) {
         toast({
           title: 'Connection Succeeded',
@@ -256,6 +390,29 @@ export const ModelsPage: React.FC = () => {
       setTestingProviderId(null);
     }
   };
+
+  // Filtered lists
+  const filteredProviders = providers.filter((p) => {
+    const q = providerSearch.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      p.id.toLowerCase().includes(q) ||
+      p.name.toLowerCase().includes(q) ||
+      p.type.toLowerCase().includes(q) ||
+      (p.baseUrl && p.baseUrl.toLowerCase().includes(q))
+    );
+  });
+
+  const filteredModels = models.filter((m) => {
+    const q = modelSearch.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      m.modelId.toLowerCase().includes(q) ||
+      m.provider.toLowerCase().includes(q) ||
+      (m.providerModelName && m.providerModelName.toLowerCase().includes(q)) ||
+      (m.description && m.description.toLowerCase().includes(q))
+    );
+  });
 
   const usageRecords = usageData?.items || [];
 
@@ -293,21 +450,15 @@ export const ModelsPage: React.FC = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsRegisterProviderOpen(true)}
+                onClick={handleOpenAddProvider}
                 className="gap-1 text-xs"
               >
                 <Server className="h-3.5 w-3.5 text-primary" />
                 <span>Add Provider</span>
               </Button>
-
               <Button
                 size="sm"
-                onClick={() => {
-                  if (providers.length > 0 && !newModelProvider) {
-                    setNewModelProvider(providers[0].id);
-                  }
-                  setIsRegisterModelOpen(true);
-                }}
+                onClick={handleOpenAddModel}
                 className="gap-1 text-xs"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -315,151 +466,43 @@ export const ModelsPage: React.FC = () => {
               </Button>
             </>
           )}
-
-          <Badge variant="outline" className="px-3 py-1 text-xs font-mono">
-            {models.filter((m) => m.enabled).length} / {models.length} Models Active
-          </Badge>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="catalog" className="gap-1.5">
-            <Bot className="h-4 w-4" />
-            <span>Model Catalog ({models.length})</span>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
+        <TabsList className="grid w-full grid-cols-3 max-w-md">
+          <TabsTrigger value="providers" className="text-xs">
+            Providers ({providers.length})
           </TabsTrigger>
-          <TabsTrigger value="providers" className="gap-1.5">
-            <Server className="h-4 w-4" />
-            <span>AI Providers ({providers.length})</span>
+          <TabsTrigger value="catalog" className="text-xs">
+            Model Catalog ({models.length})
           </TabsTrigger>
-          <TabsTrigger value="telemetry" className="gap-1.5">
-            <BarChart3 className="h-4 w-4" />
-            <span>Usage Telemetry</span>
+          <TabsTrigger value="telemetry" className="text-xs">
+            Usage Telemetry
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Model Catalog */}
-        <TabsContent value="catalog">
-          <Card>
-            <CardContent className="p-0">
-              {isLoadingModels ? (
-                <div className="p-6 space-y-4">
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-16 w-full" />
-                  <Skeleton className="h-16 w-full" />
-                </div>
-              ) : modelsError ? (
-                <div className="p-6">
-                  <ErrorState
-                    title="Failed to load model catalog"
-                    message={(modelsError as Error).message}
-                    onRetry={() => refetchModels()}
-                  />
-                </div>
-              ) : models.length === 0 ? (
-                <div className="p-8">
-                  <EmptyState
-                    icon={Cpu}
-                    title="No Models Registered"
-                    description="No upstream LLM models have been registered yet. Click 'Register Model' to add a model."
-                    actionLabel={canAdminister ? "Register Model" : undefined}
-                    onAction={canAdminister ? () => setIsRegisterModelOpen(true) : undefined}
-                  />
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Model Identifier</TableHead>
-                        <TableHead>Provider</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Context Window</TableHead>
-                        <TableHead>Max Output</TableHead>
-                        <TableHead>Capabilities</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {models.map((m) => (
-                        <TableRow key={m.modelId}>
-                          <TableCell>
-                            <div className="font-mono text-xs font-semibold text-foreground flex items-center gap-2">
-                              <span>{m.modelId}</span>
-                              {m.isDefault && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  DEFAULT
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-[11px] font-mono text-muted-foreground mt-0.5">
-                              Upstream: {m.providerModelName}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-xs font-medium text-foreground">
-                            <span className="font-mono bg-muted/60 px-2 py-0.5 rounded text-[11px]">
-                              {m.provider}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={m.enabled ? 'default' : 'secondary'}
-                              className="text-[11px]"
-                            >
-                              {m.enabled ? 'ENABLED' : 'DISABLED'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs font-mono">
-                            {m.contextWindow.toLocaleString()} tokens
-                          </TableCell>
-                          <TableCell className="text-xs font-mono">
-                            {m.maxTokens.toLocaleString()} tokens
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {m.capabilities?.map((cap) => (
-                                <Badge key={cap} variant="outline" className="text-[10px] px-1.5 py-0">
-                                  {cap}
-                                </Badge>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {canAdminister && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className={`h-7 px-2 text-xs gap-1 ${
-                                  m.enabled ? 'text-destructive hover:text-destructive' : 'text-emerald-600 hover:text-emerald-700'
-                                }`}
-                                onClick={() => setConfirmToggleModel(m)}
-                              >
-                                {m.enabled ? (
-                                  <>
-                                    <PowerOff className="h-3.5 w-3.5" />
-                                    <span>Disable</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Power className="h-3.5 w-3.5" />
-                                    <span>Enable</span>
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* Tab 1: Providers (Primary Management Focus) */}
+        <TabsContent value="providers" className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search providers by name, id, or url..."
+                value={providerSearch}
+                onChange={(e) => setProviderSearch(e.target.value)}
+                className="pl-8 text-xs h-8"
+              />
+            </div>
+            {canAdminister && (
+              <Button size="sm" onClick={handleOpenAddProvider} className="gap-1.5 text-xs h-8">
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add Provider</span>
+              </Button>
+            )}
+          </div>
 
-        {/* Tab 2: Providers */}
-        <TabsContent value="providers">
           <Card>
             <CardHeader className="pb-3 border-b border-border">
               <div className="flex items-center justify-between">
@@ -472,16 +515,6 @@ export const ModelsPage: React.FC = () => {
                     Upstream LLM platforms, API credentials, and network connectivity status.
                   </CardDescription>
                 </div>
-                {canAdminister && (
-                  <Button
-                    size="sm"
-                    onClick={() => setIsRegisterProviderOpen(true)}
-                    className="gap-1.5 text-xs"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Register Provider</span>
-                  </Button>
-                )}
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -498,14 +531,14 @@ export const ModelsPage: React.FC = () => {
                     onRetry={() => refetchProviders()}
                   />
                 </div>
-              ) : providers.length === 0 ? (
+              ) : filteredProviders.length === 0 ? (
                 <div className="p-8">
                   <EmptyState
                     icon={Server}
-                    title="No Providers Configured"
-                    description="No upstream LLM providers have been registered yet."
+                    title="No Providers Found"
+                    description="No upstream LLM providers match your filter or have been registered yet."
                     actionLabel={canAdminister ? "Add Provider" : undefined}
-                    onAction={canAdminister ? () => setIsRegisterProviderOpen(true) : undefined}
+                    onAction={canAdminister ? handleOpenAddProvider : undefined}
                   />
                 </div>
               ) : (
@@ -514,86 +547,302 @@ export const ModelsPage: React.FC = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Provider</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Endpoint / Base URL</TableHead>
+                        <TableHead>Adapter Type</TableHead>
+                        <TableHead>Base Endpoint</TableHead>
                         <TableHead>Credentials</TableHead>
-                        <TableHead>Health</TableHead>
+                        <TableHead>Live Health</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {providers.map((p) => (
-                        <TableRow key={p.id}>
-                          <TableCell>
-                            <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
-                              <span>{p.name}</span>
-                              {p.isBuiltin && (
-                                <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                                  BUILT-IN
+                      {filteredProviders.map((p) => {
+                        const testInfo = testResults[p.id];
+                        return (
+                          <TableRow key={p.id}>
+                            <TableCell>
+                              <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                <span>{p.name}</span>
+                                {p.isBuiltin && (
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                    BUILT-IN
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-[11px] font-mono text-muted-foreground mt-0.5">
+                                ID: {p.id}
+                              </div>
+                              {p.description && (
+                                <div className="text-[11px] text-muted-foreground mt-0.5 max-w-xs truncate">
+                                  {p.description}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  p.type === 'gemini'
+                                    ? 'default'
+                                    : p.type === 'anthropic'
+                                    ? 'secondary'
+                                    : 'outline'
+                                }
+                                className="text-[11px] uppercase font-mono"
+                              >
+                                {p.type === 'gemini' ? 'Google Gemini' : p.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs font-mono text-muted-foreground max-w-[200px] truncate">
+                              {p.baseUrl || <span className="italic text-muted-foreground/60">Cloud Default</span>}
+                            </TableCell>
+                            <TableCell>
+                              {p.apiKeyConfigured ? (
+                                <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-mono">
+                                  <Key className="h-3 w-3" />
+                                  <span>{p.apiKeyMasked || '••••••••'}</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">None / Unconfigured</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`h-2 w-2 rounded-full ${
+                                      p.isHealthy ? 'bg-emerald-500' : 'bg-destructive'
+                                    }`}
+                                  />
+                                  <span className="text-xs text-foreground font-medium">
+                                    {p.isHealthy ? 'Healthy' : 'Degraded'}
+                                  </span>
+                                </div>
+                                {p.lastError && !p.isHealthy && (
+                                  <div className="text-[10px] text-destructive max-w-[180px] truncate" title={p.lastError}>
+                                    {p.lastError}
+                                  </div>
+                                )}
+                                {testInfo && (
+                                  <div className="text-[10px] text-muted-foreground font-mono">
+                                    {testInfo.latencyMs}ms • {testInfo.healthy ? 'OK' : 'Error'}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={p.enabled ? 'default' : 'secondary'} className="text-[11px]">
+                                {p.enabled ? 'ENABLED' : 'DISABLED'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                {canAdminister && (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={testingProviderId === p.id}
+                                      onClick={() => handleTestProvider(p.id)}
+                                      className="h-7 px-2 text-xs gap-1"
+                                      title="Verify live network connectivity"
+                                    >
+                                      <Activity className={`h-3 w-3 ${testingProviderId === p.id ? 'animate-spin' : ''}`} />
+                                      <span>{testingProviderId === p.id ? 'Testing...' : 'Test'}</span>
+                                    </Button>
+
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs gap-1"
+                                      onClick={() => handleOpenEditProvider(p)}
+                                      title="Edit provider configuration & API key"
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                      <span className="hidden sm:inline">Edit</span>
+                                    </Button>
+
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className={`h-7 px-2 text-xs gap-1 ${
+                                        p.enabled ? 'text-destructive hover:text-destructive' : 'text-emerald-600 hover:text-emerald-700'
+                                      }`}
+                                      onClick={() => setConfirmToggleProvider(p)}
+                                    >
+                                      {p.enabled ? <PowerOff className="h-3 w-3" /> : <Power className="h-3 w-3" />}
+                                    </Button>
+
+                                    {!p.isBuiltin && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                        onClick={() => setConfirmDeleteProvider(p)}
+                                        title="Delete provider"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 2: Model Catalog */}
+        <TabsContent value="catalog" className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search models by id, provider, or capabilities..."
+                value={modelSearch}
+                onChange={(e) => setModelSearch(e.target.value)}
+                className="pl-8 text-xs h-8"
+              />
+            </div>
+            {canAdminister && (
+              <Button size="sm" onClick={handleOpenAddModel} className="gap-1.5 text-xs h-8">
+                <Plus className="h-3.5 w-3.5" />
+                <span>Register Model</span>
+              </Button>
+            )}
+          </div>
+
+          <Card>
+            <CardHeader className="pb-3 border-b border-border">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Cpu className="h-5 w-5 text-primary" />
+                <span>Enterprise Model Allowlist</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Models authorized for client requests and routing through the AI Gateway.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isLoadingModels ? (
+                <div className="p-6 space-y-4">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : modelsError ? (
+                <div className="p-6">
+                  <ErrorState
+                    title="Failed to load models"
+                    message={(modelsError as Error).message}
+                    onRetry={() => refetchModels()}
+                  />
+                </div>
+              ) : filteredModels.length === 0 ? (
+                <div className="p-8">
+                  <EmptyState
+                    icon={Cpu}
+                    title="No Models Found"
+                    description="No authorized models match your query."
+                    actionLabel={canAdminister ? "Register Model" : undefined}
+                    onAction={canAdminister ? handleOpenAddModel : undefined}
+                  />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Model ID</TableHead>
+                        <TableHead>Provider</TableHead>
+                        <TableHead>Upstream Identifier</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Context / Max Tokens</TableHead>
+                        <TableHead>Capabilities</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredModels.map((m) => (
+                        <TableRow key={m.modelId}>
+                          <TableCell className="font-semibold text-xs font-mono">
+                            <div className="flex items-center gap-1.5">
+                              <span>{m.modelId}</span>
+                              {m.isDefault && (
+                                <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
+                                  DEFAULT
                                 </Badge>
                               )}
                             </div>
-                            <div className="text-[11px] font-mono text-muted-foreground mt-0.5">
-                              ID: {p.id}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-[11px] uppercase font-mono">
-                              {p.type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs font-mono text-muted-foreground max-w-[200px] truncate">
-                            {p.baseUrl || <span className="italic text-muted-foreground/60">Cloud Default</span>}
-                          </TableCell>
-                          <TableCell>
-                            {p.apiKeyConfigured ? (
-                              <div className="flex items-center gap-1 text-emerald-600 text-xs font-mono">
-                                <Key className="h-3 w-3" />
-                                <span>{p.apiKeyMasked || 'Configured'}</span>
+                            {m.description && (
+                              <div className="text-[11px] text-muted-foreground font-sans mt-0.5 truncate max-w-xs">
+                                {m.description}
                               </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground italic">None / Not Required</span>
                             )}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1.5">
-                              <span className={`h-2 w-2 rounded-full ${p.isHealthy ? 'bg-emerald-500' : 'bg-destructive'}`} />
-                              <span className="text-xs text-foreground font-medium">
-                                {p.isHealthy ? 'Healthy' : 'Degraded'}
-                              </span>
-                            </div>
+                          <TableCell className="text-xs">
+                            <span className="font-mono bg-muted/60 px-2 py-0.5 rounded text-[11px] uppercase">
+                              {m.provider}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono text-muted-foreground">
+                            {m.providerModelName || m.modelId}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={p.enabled ? 'default' : 'secondary'} className="text-[11px]">
-                              {p.enabled ? 'ENABLED' : 'DISABLED'}
+                            <Badge
+                              variant={m.enabled ? 'default' : 'secondary'}
+                              className="text-[11px]"
+                            >
+                              {m.enabled ? 'ENABLED' : 'DISABLED'}
                             </Badge>
                           </TableCell>
+                          <TableCell className="text-xs font-mono">
+                            {m.contextWindow.toLocaleString()} / {m.maxTokens.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {m.capabilities?.map((cap) => (
+                                <Badge key={cap} variant="outline" className="text-[10px] px-1.5 py-0">
+                                  {cap}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1">
                               {canAdminister && (
                                 <>
                                   <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     size="sm"
-                                    disabled={testingProviderId === p.id}
-                                    onClick={() => handleTestProvider(p.id)}
-                                    className="h-7 px-2 text-xs gap-1"
-                                    title="Verify live network connectivity"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => handleOpenEditModel(m)}
+                                    title="Edit model"
                                   >
-                                    <Activity className={`h-3 w-3 ${testingProviderId === p.id ? 'animate-spin' : ''}`} />
-                                    <span>{testingProviderId === p.id ? 'Testing...' : 'Test'}</span>
+                                    <Edit2 className="h-3 w-3" />
                                   </Button>
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className={`h-7 px-2 text-xs gap-1 ${
-                                      p.enabled ? 'text-destructive hover:text-destructive' : 'text-emerald-600 hover:text-emerald-700'
+                                    className={`h-7 px-2 text-xs ${
+                                      m.enabled ? 'text-destructive hover:text-destructive' : 'text-emerald-600 hover:text-emerald-700'
                                     }`}
-                                    onClick={() => setConfirmToggleProvider(p)}
+                                    onClick={() => setConfirmToggleModel(m)}
                                   >
-                                    {p.enabled ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
-                                    <span>{p.enabled ? 'Disable' : 'Enable'}</span>
+                                    {m.enabled ? <PowerOff className="h-3 w-3" /> : <Power className="h-3 w-3" />}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                    onClick={() => setConfirmDeleteModel(m)}
+                                    title="Delete model"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
                                   </Button>
                                 </>
                               )}
@@ -626,7 +875,6 @@ export const ModelsPage: React.FC = () => {
                 <div className="p-6 space-y-3">
                   <Skeleton className="h-8 w-full" />
                   <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
                 </div>
               ) : usageRecords.length === 0 ? (
                 <div className="p-8">
@@ -657,7 +905,7 @@ export const ModelsPage: React.FC = () => {
                           <TableCell className="text-xs text-muted-foreground font-mono">
                             {new Date(u.createdAt).toLocaleTimeString()}
                           </TableCell>
-                          <TableCell className="text-xs font-medium text-foreground">
+                          <TableCell className="text-xs font-medium text-foreground uppercase">
                             {u.provider}
                           </TableCell>
                           <TableCell className="text-xs font-mono">
@@ -699,11 +947,7 @@ export const ModelsPage: React.FC = () => {
           title={`${confirmToggleModel.enabled ? 'Disable' : 'Enable'} Model`}
           description={`Are you sure you want to ${
             confirmToggleModel.enabled ? 'disable' : 'enable'
-          } ${confirmToggleModel.modelId}? ${
-            confirmToggleModel.enabled
-              ? 'Requests specifying this model will be rejected or rerouted.'
-              : 'This model will immediately become available for dispatch.'
-          }`}
+          } ${confirmToggleModel.modelId}?`}
           confirmLabel={confirmToggleModel.enabled ? 'Disable Model' : 'Enable Model'}
           variant={confirmToggleModel.enabled ? 'destructive' : 'default'}
           onConfirm={() => toggleModelMutation.mutate(confirmToggleModel)}
@@ -718,55 +962,230 @@ export const ModelsPage: React.FC = () => {
           title={`${confirmToggleProvider.enabled ? 'Disable' : 'Enable'} Provider`}
           description={`Are you sure you want to ${
             confirmToggleProvider.enabled ? 'disable' : 'enable'
-          } provider ${confirmToggleProvider.name} (${confirmToggleProvider.id})? Models routed to this provider will be affected.`}
+          } provider ${confirmToggleProvider.name} (${confirmToggleProvider.id})?`}
           confirmLabel={confirmToggleProvider.enabled ? 'Disable Provider' : 'Enable Provider'}
           variant={confirmToggleProvider.enabled ? 'destructive' : 'default'}
           onConfirm={() => toggleProviderMutation.mutate(confirmToggleProvider)}
         />
       )}
 
-      {/* Register Model Dialog */}
-      <Dialog open={isRegisterModelOpen} onOpenChange={setIsRegisterModelOpen}>
+      {/* Confirmation Dialog for Deleting Provider */}
+      {confirmDeleteProvider && (
+        <ConfirmDialog
+          open={Boolean(confirmDeleteProvider)}
+          onOpenChange={(open) => !open && setConfirmDeleteProvider(null)}
+          title={`Delete Provider: ${confirmDeleteProvider.name}`}
+          description={`Are you sure you want to permanently delete provider '${confirmDeleteProvider.id}'? This action cannot be undone.`}
+          confirmLabel="Delete Provider"
+          variant="destructive"
+          onConfirm={() => deleteProviderMutation.mutate(confirmDeleteProvider.id)}
+        />
+      )}
+
+      {/* Confirmation Dialog for Deleting Model */}
+      {confirmDeleteModel && (
+        <ConfirmDialog
+          open={Boolean(confirmDeleteModel)}
+          onOpenChange={(open) => !open && setConfirmDeleteModel(null)}
+          title={`Delete Model: ${confirmDeleteModel.modelId}`}
+          description={`Are you sure you want to remove model '${confirmDeleteModel.modelId}' from the platform catalog?`}
+          confirmLabel="Delete Model"
+          variant="destructive"
+          onConfirm={() => deleteModelMutation.mutate(confirmDeleteModel.modelId)}
+        />
+      )}
+
+      {/* Provider Modal (Add / Edit) */}
+      <Dialog open={isProviderModalOpen} onOpenChange={setIsProviderModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold flex items-center gap-2">
-              <Cpu className="h-5 w-5 text-primary" />
-              <span>Register AI Model Endpoint</span>
+              <Server className="h-5 w-5 text-primary" />
+              <span>{editingProvider ? 'Edit AI Provider Adapter' : 'Add AI Provider Adapter'}</span>
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Configure and authorize a new upstream LLM model for organizational routing and dispatch.
+              {editingProvider
+                ? `Update configuration and credentials for provider '${editingProvider.id}'.`
+                : 'Configure a new upstream AI model provider (e.g. Google Gemini, Groq, OpenAI, Anthropic, or Ollama).'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2 text-xs">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-medium text-foreground block mb-1">Model Identifier (Internal Key)</label>
+                <label className="font-medium text-foreground block mb-1">Provider ID (Slug)</label>
                 <Input
-                  placeholder="e.g., llama-3-8b"
-                  value={newModelId}
-                  onChange={(e) => setNewModelId(e.target.value)}
-                  className="text-xs"
+                  placeholder="e.g., groq, gemini, local-ollama"
+                  value={pId}
+                  disabled={Boolean(editingProvider)}
+                  onChange={(e) => setPId(e.target.value)}
+                  className="text-xs font-mono"
                 />
               </div>
 
               <div>
-                <label className="font-medium text-foreground block mb-1">Provider Adapter</label>
+                <label className="font-medium text-foreground block mb-1">Provider Adapter Type</label>
                 <select
                   className="w-full px-3 py-2 text-xs bg-background border border-input rounded-md focus:outline-none"
-                  value={newModelProvider}
-                  onChange={(e) => setNewModelProvider(e.target.value)}
+                  value={pType}
+                  onChange={(e) => {
+                    const val = e.target.value as any;
+                    setPType(val);
+                    if (!editingProvider) {
+                      if (val === 'gemini') {
+                        setPBaseUrl('https://generativelanguage.googleapis.com/v1beta');
+                        if (!pName) setPName('Google Gemini');
+                      } else if (val === 'openai') {
+                        setPBaseUrl('https://api.groq.com/openai/v1');
+                        if (!pName) setPName('Groq Cloud');
+                      } else if (val === 'anthropic') {
+                        setPBaseUrl('https://api.anthropic.com');
+                        if (!pName) setPName('Anthropic Claude');
+                      }
+                    }
+                  }}
+                >
+                  <option value="openai">OpenAI / OpenAI-Compatible (Groq, vLLM)</option>
+                  <option value="gemini">Google Gemini (Native API)</option>
+                  <option value="anthropic">Anthropic Claude</option>
+                  <option value="mock">Mock Adapter (Offline / Local Dev)</option>
+                  <option value="custom">Custom Endpoint</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="font-medium text-foreground block mb-1">Display Name</label>
+              <Input
+                placeholder="e.g., Groq Cloud or Google Gemini"
+                value={pName}
+                onChange={(e) => setPName(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="font-medium text-foreground block mb-1">
+                API Base URL {pType === 'mock' ? '(Not required for mock)' : ''}
+              </label>
+              <Input
+                placeholder={
+                  pType === 'gemini'
+                    ? 'https://generativelanguage.googleapis.com/v1beta'
+                    : pType === 'anthropic'
+                    ? 'https://api.anthropic.com'
+                    : 'https://api.groq.com/openai/v1 or https://api.openai.com/v1'
+                }
+                value={pBaseUrl}
+                onChange={(e) => setPBaseUrl(e.target.value)}
+                className="text-xs font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="font-medium text-foreground block mb-1">
+                API Key / Secret Token {editingProvider ? '(Leave blank to keep existing key)' : ''}
+              </label>
+              <Input
+                type="password"
+                placeholder={
+                  editingProvider?.apiKeyConfigured
+                    ? `${editingProvider.apiKeyMasked || '••••••••'} (Leave empty to keep existing)`
+                    : 'Enter secret API key...'
+                }
+                value={pApiKey}
+                onChange={(e) => setPApiKey(e.target.value)}
+                className="text-xs font-mono"
+                autoComplete="off"
+              />
+              <span className="text-[10px] text-muted-foreground mt-1 block">
+                API keys are encrypted using AES-256-GCM at rest and never exposed to clients or stored in browser state.
+              </span>
+            </div>
+
+            <div>
+              <label className="font-medium text-foreground block mb-1">Description (Optional)</label>
+              <Input
+                placeholder="Operational notes, quota limits, or tier information..."
+                value={pDescription}
+                onChange={(e) => setPDescription(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="pEnabledCheck"
+                checked={pEnabled}
+                onChange={(e) => setPEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              <label htmlFor="pEnabledCheck" className="text-xs font-medium cursor-pointer">
+                Provider is Enabled for Routing
+              </label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setIsProviderModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={(!editingProvider && !pId.trim()) || !pName.trim() || saveProviderMutation.isPending}
+              onClick={() => saveProviderMutation.mutate()}
+            >
+              {saveProviderMutation.isPending ? 'Saving...' : editingProvider ? 'Update Provider' : 'Save Provider'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Model Modal (Add / Edit) */}
+      <Dialog open={isModelModalOpen} onOpenChange={setIsModelModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold flex items-center gap-2">
+              <Cpu className="h-5 w-5 text-primary" />
+              <span>{editingModel ? 'Edit Model Configuration' : 'Register AI Model Endpoint'}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Configure and authorize an LLM model under an active provider for organizational dispatch.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-medium text-foreground block mb-1">Model ID (Platform Key)</label>
+                <Input
+                  placeholder="e.g., gpt-4o or gemini-1.5-flash"
+                  value={mModelId}
+                  disabled={Boolean(editingModel)}
+                  onChange={(e) => setMModelId(e.target.value)}
+                  className="text-xs font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="font-medium text-foreground block mb-1">Associated Provider</label>
+                <select
+                  className="w-full px-3 py-2 text-xs bg-background border border-input rounded-md focus:outline-none"
+                  value={mProvider}
+                  onChange={(e) => setMProvider(e.target.value)}
                 >
                   {providers.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.id})
+                      {p.name} ({p.id}) {p.enabled ? '' : '[DISABLED]'}
                     </option>
                   ))}
                   {providers.length === 0 && (
                     <>
-                      <option value="openai">OpenAI</option>
-                      <option value="anthropic">Anthropic</option>
-                      <option value="mock">Mock</option>
+                      <option value="groq">Groq Cloud (groq)</option>
+                      <option value="gemini">Google Gemini (gemini)</option>
+                      <option value="openai">OpenAI (openai)</option>
+                      <option value="mock">Mock Adapter (mock)</option>
                     </>
                   )}
                 </select>
@@ -774,12 +1193,12 @@ export const ModelsPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="font-medium text-foreground block mb-1">Upstream Model Identifier</label>
+              <label className="font-medium text-foreground block mb-1">Upstream Provider Model ID</label>
               <Input
-                placeholder="e.g., meta-llama/Meta-Llama-3-8B-Instruct or gpt-4o"
-                value={newProviderModelName}
-                onChange={(e) => setNewProviderModelName(e.target.value)}
-                className="text-xs"
+                placeholder="e.g., llama-3.3-70b-versatile, gemini-1.5-flash, or gpt-4o"
+                value={mProviderModelName}
+                onChange={(e) => setMProviderModelName(e.target.value)}
+                className="text-xs font-mono"
               />
             </div>
 
@@ -789,8 +1208,8 @@ export const ModelsPage: React.FC = () => {
                 <Input
                   type="number"
                   placeholder="128000"
-                  value={newContextWindow}
-                  onChange={(e) => setNewContextWindow(e.target.value)}
+                  value={mContextWindow}
+                  onChange={(e) => setMContextWindow(e.target.value)}
                   className="text-xs"
                 />
               </div>
@@ -800,8 +1219,8 @@ export const ModelsPage: React.FC = () => {
                 <Input
                   type="number"
                   placeholder="4096"
-                  value={newMaxTokens}
-                  onChange={(e) => setNewMaxTokens(e.target.value)}
+                  value={mMaxTokens}
+                  onChange={(e) => setMMaxTokens(e.target.value)}
                   className="text-xs"
                 />
               </div>
@@ -810,9 +1229,9 @@ export const ModelsPage: React.FC = () => {
             <div>
               <label className="font-medium text-foreground block mb-1">Capabilities (Comma Separated)</label>
               <Input
-                placeholder="general, code, analysis, reasoning"
-                value={newCapabilities}
-                onChange={(e) => setNewCapabilities(e.target.value)}
+                placeholder="chat, reasoning, code, multimodal"
+                value={mCapabilities}
+                onChange={(e) => setMCapabilities(e.target.value)}
                 className="text-xs"
               />
             </div>
@@ -820,123 +1239,52 @@ export const ModelsPage: React.FC = () => {
             <div>
               <label className="font-medium text-foreground block mb-1">Description (Optional)</label>
               <Input
-                placeholder="Brief summary of model capabilities and usage policies..."
-                value={newModelDescription}
-                onChange={(e) => setNewModelDescription(e.target.value)}
+                placeholder="Model specifications, safety policies, or recommended tasks..."
+                value={mDescription}
+                onChange={(e) => setMDescription(e.target.value)}
                 className="text-xs"
               />
             </div>
-          </div>
 
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setIsRegisterModelOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              disabled={!newModelId.trim() || registerModelMutation.isPending}
-              onClick={() => registerModelMutation.mutate()}
-            >
-              {registerModelMutation.isPending ? 'Registering...' : 'Register Model'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Register Provider Dialog */}
-      <Dialog open={isRegisterProviderOpen} onOpenChange={setIsRegisterProviderOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-base font-semibold flex items-center gap-2">
-              <Server className="h-5 w-5 text-primary" />
-              <span>Configure AI Provider Adapter</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Register a new upstream provider endpoint (e.g. OpenAI, Anthropic, vLLM, or Ollama).
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-medium text-foreground block mb-1">Provider ID (Slug)</label>
-                <Input
-                  placeholder="e.g., local-ollama"
-                  value={newProviderId}
-                  onChange={(e) => setNewProviderId(e.target.value)}
-                  className="text-xs font-mono"
+            <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="mEnabledCheck"
+                  checked={mEnabled}
+                  onChange={(e) => setMEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded border-input"
                 />
+                <label htmlFor="mEnabledCheck" className="text-xs font-medium cursor-pointer">
+                  Model is Enabled
+                </label>
               </div>
 
-              <div>
-                <label className="font-medium text-foreground block mb-1">Provider Type</label>
-                <select
-                  className="w-full px-3 py-2 text-xs bg-background border border-input rounded-md focus:outline-none"
-                  value={newProviderType}
-                  onChange={(e) => setNewProviderType(e.target.value as any)}
-                >
-                  <option value="openai">OpenAI / OpenAI-Compatible</option>
-                  <option value="anthropic">Anthropic Claude</option>
-                  <option value="mock">Mock Provider (Local Dev)</option>
-                  <option value="custom">Custom Endpoint</option>
-                </select>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="mDefaultCheck"
+                  checked={mIsDefault}
+                  onChange={(e) => setMIsDefault(e.target.checked)}
+                  className="h-4 w-4 rounded border-input"
+                />
+                <label htmlFor="mDefaultCheck" className="text-xs font-medium cursor-pointer">
+                  Default Platform Model
+                </label>
               </div>
-            </div>
-
-            <div>
-              <label className="font-medium text-foreground block mb-1">Display Name</label>
-              <Input
-                placeholder="e.g., Production Ollama Cluster"
-                value={newProviderName}
-                onChange={(e) => setNewProviderName(e.target.value)}
-                className="text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-foreground block mb-1">
-                Base URL / Endpoint {newProviderType === 'mock' ? '(Optional for mock)' : ''}
-              </label>
-              <Input
-                placeholder={
-                  newProviderType === 'anthropic'
-                    ? 'https://api.anthropic.com'
-                    : 'http://127.0.0.1:11434/v1 or https://api.openai.com/v1'
-                }
-                value={newProviderBaseUrl}
-                onChange={(e) => setNewProviderBaseUrl(e.target.value)}
-                className="text-xs font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="font-medium text-foreground block mb-1">
-                API Key / Secret Token (Masked & Encrypted)
-              </label>
-              <Input
-                type="password"
-                placeholder="sk-... or Bearer secret (optional for local models)"
-                value={newProviderApiKey}
-                onChange={(e) => setNewProviderApiKey(e.target.value)}
-                className="text-xs font-mono"
-                autoComplete="off"
-              />
-              <span className="text-[10px] text-muted-foreground mt-1 block">
-                Secrets are stored securely in backend configuration and never returned in plaintext.
-              </span>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setIsRegisterProviderOpen(false)}>
+            <Button variant="outline" size="sm" onClick={() => setIsModelModalOpen(false)}>
               Cancel
             </Button>
             <Button
               size="sm"
-              disabled={!newProviderId.trim() || !newProviderName.trim() || registerProviderMutation.isPending}
-              onClick={() => registerProviderMutation.mutate()}
+              disabled={(!editingModel && !mModelId.trim()) || saveModelMutation.isPending}
+              onClick={() => saveModelMutation.mutate()}
             >
-              {registerProviderMutation.isPending ? 'Saving Provider...' : 'Save Provider'}
+              {saveModelMutation.isPending ? 'Saving...' : editingModel ? 'Update Model' : 'Register Model'}
             </Button>
           </DialogFooter>
         </DialogContent>

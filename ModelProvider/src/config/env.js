@@ -4,7 +4,9 @@ const dotenv = require('dotenv');
 const path = require('path');
 
 dotenv.config();
-// Also attempt loading root project .env if present
+// Ensure service-level and workspace-level .env files are resolved
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
@@ -57,7 +59,7 @@ const env = {
   // Outbound Security & SSRF Protection
   allowedProviderHosts: (
     process.env.ALLOWED_PROVIDER_HOSTS ||
-    'api.openai.com,api.anthropic.com,api.groq.com,openrouter.ai,api.mistral.ai,api.deepseek.com,127.0.0.1,localhost'
+    'api.openai.com,api.anthropic.com,api.groq.com,openrouter.ai,api.mistral.ai,api.deepseek.com,generativelanguage.googleapis.com,127.0.0.1,localhost'
   )
     .split(',')
     .map((h) => h.trim().toLowerCase())
